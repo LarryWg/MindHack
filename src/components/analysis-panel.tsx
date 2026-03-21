@@ -30,9 +30,15 @@ export function AnalysisPanel({
   const [text, setText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const [audioLevel, setAudioLevel] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const meterRafRef = useRef<number | null>(null);
+  const timerIntervalRef = useRef<number | null>(null);
 
   const handleSend = () => {
     if (!text.trim() || isLoading) return;
@@ -52,13 +58,60 @@ export function AnalysisPanel({
     if (file) onSubmit?.({ type: "file", file });
   };
 
-const toggleRecording = async () => {
+const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+    if (timerIntervalRef.current) {
+      window.clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+    if (meterRafRef.current) {
+      window.cancelAnimationFrame(meterRafRef.current);
+      meterRafRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => undefined);
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+    setRecordSeconds(0);
+    setAudioLevel(0);
+  };
+
+  const toggleRecording = async () => {
     if (!isRecording) {
       // Start recording
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const mediaRecorder = new MediaRecorder(stream);
         audioChunksRef.current = [];
+
+        // Setup metering
+        const audioContext = new AudioContext();
+        const source = audioContext.createMediaStreamSource(stream);
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 2048;
+        source.connect(analyser);
+
+        audioContextRef.current = audioContext;
+        analyserRef.current = analyser;
+
+        const updateMeter = () => {
+          if (!analyserRef.current) return;
+          const data = new Uint8Array(analyserRef.current.frequencyBinCount);
+          analyserRef.current.getByteTimeDomainData(data);
+          let sum = 0;
+          for (let i = 0; i < data.length; i++) {
+            const value = data[i] / 128 - 1;
+            sum += value * value;
+          }
+          const rms = Math.sqrt(sum / data.length);
+          setAudioLevel(Math.min(1, rms * 1.5));
+          meterRafRef.current = window.requestAnimationFrame(updateMeter);
+        };
+        meterRafRef.current = window.requestAnimationFrame(updateMeter);
 
         mediaRecorder.ondataavailable = (event) => {
           audioChunksRef.current.push(event.data);
@@ -91,21 +144,23 @@ const toggleRecording = async () => {
           } catch (error) {
             console.error("Error sending audio:", error);
             setIsTranscribing(false);
+          } finally {
+            stopRecording();
           }
         };
 
         mediaRecorder.start();
         mediaRecorderRef.current = mediaRecorder;
         setIsRecording(true);
+
+        timerIntervalRef.current = window.setInterval(() => {
+          setRecordSeconds((prev) => prev + 1);
+        }, 1000);
       } catch (error) {
         console.error("Microphone access denied:", error);
       }
     } else {
-      // Stop recording
-      if (mediaRecorderRef.current) {
-        mediaRecorderRef.current.stop();
-      }
-      setIsRecording(false);
+      stopRecording();
     }
   };
 
@@ -184,6 +239,22 @@ const toggleRecording = async () => {
               <Mic size={13} />
             )}
           </button>
+
+          {/* Recording status */}
+          {(isRecording || isTranscribing) && (
+            <div className="flex flex-col items-start gap-1 text-xs text-black/60 ml-2">
+              <div className="font-medium">{isRecording ? "Recording..." : "Transcribing..."}</div>
+              <div className="flex items-center gap-2">
+                <span>{`00:${recordSeconds.toString().padStart(2, "0")}`}</span>
+                <div className="w-16 h-2 bg-black/10 rounded overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-400"
+                    style={{ width: `${Math.round(audioLevel * 100)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* File upload */}
           <button
