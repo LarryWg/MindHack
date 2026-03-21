@@ -7,16 +7,21 @@ import { NeuroSidebar } from "@/components/neuro-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import { AgentCard, MOCK_AGENTS } from "@/components/agent-card";
 import { AnalysisPanel, type AnalysisInput } from "@/components/analysis-panel";
+import { NeuroRadarChart } from "@/components/radar-chart";
 import GlassSurface from "@/components/GlassSurface";
 
-// Heavy components — dynamic, no SSR (same pattern as Callio)
+// Heavy components — dynamic, no SSR
 const Dither = dynamic(() => import("@/components/Dither"), { ssr: false });
 const BrainViewer = dynamic(
   () => import("@/components/brain-viewer").then((m) => ({ default: m.BrainViewer })),
   { ssr: false }
 );
 
-type AgentStep = { name: string; status: "pending" | "running" | "done" | "error"; detail?: string };
+type AgentStep = {
+  name: string;
+  status: "pending" | "running" | "done" | "error";
+  detail?: string;
+};
 
 export default function DashboardPage() {
   const [hasStarted, setHasStarted] = useState(false);
@@ -24,9 +29,10 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
+  const [biomarkerScores, setBiomarkerScores] = useState<Record<string, number> | undefined>();
   const [activePage, setActivePage] = useState("analysis");
 
-  // Shift+P toggles panels — same shortcut as Callio
+  // Shift+P toggles panels
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.shiftKey && e.key === "P") {
@@ -47,6 +53,7 @@ export default function DashboardPage() {
     async (input: AnalysisInput) => {
       setHasStarted(true);
       setIsLoading(true);
+      setBiomarkerScores(undefined);
       setAgentSteps([
         { name: "STT preprocessor", status: "running" },
         { name: "Lexical agent", status: "pending" },
@@ -62,11 +69,14 @@ export default function DashboardPage() {
           input.type === "text"
             ? { input_value: input.content, ...(sessionId ? { session_id: sessionId } : {}) }
             : input.type === "transcript"
-            ? { transcript: input.content, pause_map: input.pauseMap, ...(sessionId ? { session_id: sessionId } : {}) }
+            ? {
+                transcript: input.content,
+                pause_map: input.pauseMap,
+                ...(sessionId ? { session_id: sessionId } : {}),
+              }
             : null;
 
         if (!body) {
-          // File upload — TODO: handle separately
           setIsLoading(false);
           return;
         }
@@ -82,7 +92,7 @@ export default function DashboardPage() {
           return;
         }
 
-        // Stream NDJSON — same pattern as Callio's chatbot-panel
+        // Stream NDJSON
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
@@ -95,14 +105,23 @@ export default function DashboardPage() {
             if (event.type === "step" && event.step) {
               setAgentSteps((prev) =>
                 prev.map((s) =>
-                  s.name === event.step.name ? { ...s, status: event.step.status, detail: event.step.detail } : s
+                  s.name === event.step.name
+                    ? { ...s, status: event.step.status, detail: event.step.detail }
+                    : s
                 )
               );
             } else if (event.type === "end") {
               if (event.session_id) setSessionId(event.session_id);
-              setAgentSteps((prev) => prev.map((s) => ({ ...s, status: "done" as const })));
+              if (event.scores) setBiomarkerScores(event.scores);
+              setAgentSteps((prev) =>
+                prev.map((s) => ({ ...s, status: "done" as const }))
+              );
             } else if (event.type === "error") {
-              setAgentSteps((prev) => prev.map((s) => s.status === "running" ? { ...s, status: "error" as const } : s));
+              setAgentSteps((prev) =>
+                prev.map((s) =>
+                  s.status === "running" ? { ...s, status: "error" as const } : s
+                )
+              );
             }
           } catch {
             // skip unparseable lines
@@ -167,6 +186,7 @@ export default function DashboardPage() {
               setHasStarted(false);
               setPanelsOpen(false);
               setAgentSteps([]);
+              setBiomarkerScores(undefined);
             }}
           />
         </GlassSurface>
@@ -174,11 +194,10 @@ export default function DashboardPage() {
         {/* Main area */}
         <div className="flex flex-col flex-1 min-w-0">
           {/* Header */}
-          <SiteHeader title="Genome Analysis" />
+          <SiteHeader title="Cognitive Analysis" />
 
           {/* Content */}
           <div className="relative flex flex-1 min-h-0 flex-col items-center justify-center gap-4 px-4 pb-4">
-
             {/* Left agent panels */}
             <div
               className={`absolute left-4 top-4 bottom-4 flex flex-col gap-4 transition-opacity duration-300 ease-out ${
@@ -195,14 +214,13 @@ export default function DashboardPage() {
                     className="overflow-hidden h-full"
                     contentClassName="!p-0 !m-0 !items-start !justify-start"
                   >
-                    <AgentCard {...agent} isLoading={isLoading && i === 0} />
+                    <AgentCard {...agent} isActive={isLoading && i === 0} isLoading={isLoading && i === 0} />
                   </GlassSurface>
                 </div>
               ))}
             </div>
 
-            {/* Center — brain viewer */}
-            <div className="flex-1" />
+            {/* Center — brain viewer + radar chart */}
             <div
               className={`transition-all duration-500 ${
                 panelsOpen ? "opacity-100" : "opacity-0"
@@ -210,17 +228,35 @@ export default function DashboardPage() {
               style={{ width: "42rem", maxWidth: "100%" }}
             >
               {hasStarted && (
-                <GlassSurface
-                  width={"100%" as unknown as number}
-                  height={300}
-                  borderRadius={20}
-                  opacity={0.6}
-                  blur={14}
-                  className="overflow-hidden"
-                  contentClassName="!p-0"
-                >
-                  <BrainViewer />
-                </GlassSurface>
+                <div className="flex flex-col gap-3">
+                  <GlassSurface
+                    width={"100%" as unknown as number}
+                    height={240}
+                    borderRadius={20}
+                    opacity={0.6}
+                    blur={14}
+                    className="overflow-hidden"
+                    contentClassName="!p-0"
+                  >
+                    <BrainViewer />
+                  </GlassSurface>
+                  <GlassSurface
+                    width={"100%" as unknown as number}
+                    height={220}
+                    borderRadius={16}
+                    opacity={0.55}
+                    blur={12}
+                    className="overflow-hidden"
+                    contentClassName="!p-0"
+                  >
+                    <div className="p-4 h-full flex flex-col">
+                      <span className="text-[10px] uppercase tracking-widest text-black/30 font-medium mb-2">
+                        Cognitive Domains
+                      </span>
+                      <NeuroRadarChart scores={biomarkerScores} isLoading={isLoading} />
+                    </div>
+                  </GlassSurface>
+                </div>
               )}
             </div>
 
@@ -240,13 +276,13 @@ export default function DashboardPage() {
                     className="overflow-hidden h-full"
                     contentClassName="!p-0 !m-0 !items-start !justify-start"
                   >
-                    <AgentCard {...agent} isLoading={isLoading && i === 1} />
+                    <AgentCard {...agent} isActive={isLoading && i === 1} isLoading={isLoading && i === 1} />
                   </GlassSurface>
                 </div>
               ))}
             </div>
 
-            {/* Bottom spacer that collapses when started — same animation as Callio */}
+            {/* Collapsing spacer */}
             <div
               className="transition-[flex-grow] duration-[1400ms] ease-in-out"
               style={{ flexGrow: hasStarted ? 0 : 1, flexShrink: 0, flexBasis: 0 }}
