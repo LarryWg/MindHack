@@ -28,6 +28,7 @@ export function AnalysisPanel({
   placeholder = "Ask about cognitive signature analysis...",
 }: AnalysisPanelProps) {
   const [text, setText] = useState("");
+  const [transcriptPreview, setTranscriptPreview] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
@@ -138,7 +139,12 @@ const stopRecording = () => {
               return;
             }
 
-            const { transcript, pauseMap } = await res.json();
+            const { transcript, pauseMap, wordTimestamps } = await res.json();
+            const words = Array.isArray(wordTimestamps)
+              ? wordTimestamps.map((w: {word: string}) => w.word).join(" ")
+              : transcript;
+            setTranscriptPreview(words || transcript);
+            setText(transcript);
             onSubmit?.({ type: "transcript", content: transcript, pauseMap });
             setIsTranscribing(false);
           } catch (error) {
@@ -195,6 +201,13 @@ const stopRecording = () => {
           </div>
         </div>
       )}
+
+      {transcriptPreview ? (
+        <div className="rounded-2xl px-3 py-2 bg-black/5 text-sm text-black/70">
+          <div className="text-xs text-black/40 mb-1">Live transcription preview</div>
+          <div className="break-words">{transcriptPreview}</div>
+        </div>
+      ) : null}
 
       {/* Input box */}
       <div
