@@ -17,6 +17,9 @@ type AgentStep = {
 
 type AnalysisPanelProps = {
   onSubmit?: (input: AnalysisInput) => void;
+  onLangFlowTest?: (input: AnalysisInput) => void;
+  useLangFlowTest?: boolean;
+  onToggleLangFlowTest?: () => void;
   isLoading?: boolean;
   agentSteps?: AgentStep[];
   placeholder?: string;
@@ -24,6 +27,9 @@ type AnalysisPanelProps = {
 
 export function AnalysisPanel({
   onSubmit,
+  onLangFlowTest,
+  useLangFlowTest = false,
+  onToggleLangFlowTest,
   isLoading = false,
   agentSteps = [],
   placeholder = "Ask about cognitive signature analysis...",
@@ -47,9 +53,18 @@ export function AnalysisPanel({
         : transcript;
       setTranscriptPreview(words || transcript);
       setText(transcript);
-      onSubmit?.({ type: "transcript", content: transcript, pauseMap });
+
+      const input: AnalysisInput = useLangFlowTest
+        ? { type: "text", content: transcript }
+        : { type: "transcript", content: transcript, pauseMap };
+
+      if (useLangFlowTest && onLangFlowTest) {
+        onLangFlowTest(input);
+      } else if (!useLangFlowTest && onSubmit) {
+        onSubmit(input);
+      }
     },
-    [onSubmit],
+    [onSubmit, onLangFlowTest, useLangFlowTest],
   );
 
   const { isRecording, isTranscribing, recordSeconds, audioLevel, toggle } =
@@ -57,7 +72,14 @@ export function AnalysisPanel({
 
   const handleSend = () => {
     if (!text.trim() || isLoading) return;
-    onSubmit?.({ type: "text", content: text.trim() });
+    const input: AnalysisInput = { type: "text", content: text.trim() };
+
+    if (useLangFlowTest && onLangFlowTest) {
+      onLangFlowTest(input);
+    } else if (!useLangFlowTest && onSubmit) {
+      onSubmit(input);
+    }
+
     setText("");
   };
 
@@ -136,6 +158,21 @@ export function AnalysisPanel({
             <span>Claude</span>
             <ChevronDown size={10} className="opacity-50" />
           </div>
+
+          {/* LangFlow Test Toggle */}
+          {onToggleLangFlowTest && (
+            <button
+              onClick={onToggleLangFlowTest}
+              className={`flex items-center gap-1 text-xs rounded-lg px-2 py-1 transition-colors ${
+                useLangFlowTest
+                  ? "bg-blue-100 text-blue-700"
+                  : "text-black/35 bg-black/[0.03] hover:bg-black/[0.05]"
+              }`}
+            >
+              <div className={`w-2.5 h-2.5 rounded-full ${useLangFlowTest ? "bg-blue-500" : "bg-gray-400"}`} />
+              <span>LangFlow Test</span>
+            </button>
+          )}
 
           {/* Mic */}
           <button

@@ -7,6 +7,10 @@ from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
+from dotenv import load_dotenv
+
+# Load environment variables from .env file in parent directory
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 app = FastAPI(title="NeuroTrace Backend")
 

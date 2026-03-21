@@ -48,6 +48,8 @@ export default function DashboardPage() {
   const [activations, setActivations] = useState<RegionActivation[]>(BRAIN_REGIONS);
   const [biomarkerScores, setBiomarkerScores] = useState<Record<string, number> | undefined>();
   const [activePage, setActivePage] = useState("analysis");
+  const [useLangFlowTest, setUseLangFlowTest] = useState(false);
+  const [langFlowResponse, setLangFlowResponse] = useState<string | null>(null);
 
   const activeAgentName = useMemo(() => {
     const running = agentSteps.find((s) => s.status === "running");
@@ -76,6 +78,47 @@ export default function DashboardPage() {
   useEffect(() => {
     if (hasStarted) setPanelsOpen(true);
   }, [hasStarted]);
+
+  const handleLangFlowTest = useCallback(
+    async (input: AnalysisInput) => {
+      if (input.type === "file") {
+        console.error("LangFlow test doesn't support file inputs");
+        return;
+      }
+
+      setHasStarted(true);
+      setIsLoading(true);
+      setLangFlowResponse(null);
+
+      try {
+        const body = { input_value: input.content };
+
+        const res = await fetch("http://localhost:8000/langflow-test", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error("LangFlow test failed:", errorText);
+          setLangFlowResponse(`Error: ${errorText}`);
+          return;
+        }
+
+        const data = await res.json();
+        console.log("LangFlow response:", data);
+        setLangFlowResponse(JSON.stringify(data, null, 2));
+
+      } catch (error) {
+        console.error("LangFlow test error:", error);
+        setLangFlowResponse(`Error: ${error}`);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    []
+  );
 
   const handleSubmit = useCallback(
     async (input: AnalysisInput) => {
@@ -248,6 +291,9 @@ export default function DashboardPage() {
               </div>
               <AnalysisPanel
                 onSubmit={handleSubmit}
+                onLangFlowTest={handleLangFlowTest}
+                useLangFlowTest={useLangFlowTest}
+                onToggleLangFlowTest={() => setUseLangFlowTest(!useLangFlowTest)}
                 isLoading={isLoading}
                 agentSteps={[]}
                 placeholder="Paste text or record speech to begin analysis…"
@@ -305,7 +351,7 @@ export default function DashboardPage() {
                   />
                 </div>
 
-                {/* Radar chart */}
+                {/* Radar chart or LangFlow response */}
                 <GlassSurface
                   width={"100%" as unknown as number}
                   height={180}
@@ -315,18 +361,40 @@ export default function DashboardPage() {
                   className="overflow-hidden shrink-0"
                   contentClassName="!p-0"
                 >
-                  <div className="p-3 h-full flex flex-col">
-                    <span className="text-[10px] uppercase tracking-widest text-black/30 font-medium mb-1">
-                      Cognitive Domains
-                    </span>
-                    <NeuroRadarChart scores={biomarkerScores} isLoading={isLoading} />
-                  </div>
+                  {useLangFlowTest ? (
+                    <div className="p-3 h-full flex flex-col">
+                      <span className="text-[10px] uppercase tracking-widest text-black/30 font-medium mb-1">
+                        LangFlow Response
+                      </span>
+                      <div className="flex-1 flex items-center justify-center">
+                        {langFlowResponse ? (
+                          <pre className="text-xs bg-black/10 p-2 rounded overflow-auto w-full h-full whitespace-pre-wrap">
+                            {langFlowResponse}
+                          </pre>
+                        ) : (
+                          <span className="text-sm text-zinc-400">
+                            Submit text or audio to see LangFlow response
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 h-full flex flex-col">
+                      <span className="text-[10px] uppercase tracking-widest text-black/30 font-medium mb-1">
+                        Cognitive Domains
+                      </span>
+                      <NeuroRadarChart scores={biomarkerScores} isLoading={isLoading} />
+                    </div>
+                  )}
                 </GlassSurface>
 
                 {/* Analysis input */}
                 <div className="shrink-0">
                   <AnalysisPanel
                     onSubmit={handleSubmit}
+                    onLangFlowTest={handleLangFlowTest}
+                    useLangFlowTest={useLangFlowTest}
+                    onToggleLangFlowTest={() => setUseLangFlowTest(!useLangFlowTest)}
                     isLoading={isLoading}
                     agentSteps={agentSteps}
                     placeholder="Ask about cognitive signature analysis…"
