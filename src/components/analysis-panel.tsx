@@ -29,7 +29,10 @@ export function AnalysisPanel({
 }: AnalysisPanelProps) {
   const [text, setText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   const handleSend = () => {
     if (!text.trim() || isLoading) return;
@@ -49,10 +52,61 @@ export function AnalysisPanel({
     if (file) onSubmit?.({ type: "file", file });
   };
 
-  const toggleRecording = () => {
-    setIsRecording((v) => !v);
-    // TODO: wire to friend's Whisper STT flow
-    // When recording stops, call: onSubmit({ type: "transcript", content: transcript, pauseMap })
+const toggleRecording = async () => {
+    if (!isRecording) {
+      // Start recording
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream);
+        audioChunksRef.current = [];
+
+        mediaRecorder.ondataavailable = (event) => {
+          audioChunksRef.current.push(event.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+          stream.getTracks().forEach((track) => track.stop());
+          setIsTranscribing(true);
+
+          try {
+            const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
+            const formData = new FormData();
+            formData.append("audio", audioBlob, "recording.wav");
+
+            const res = await fetch("/api/transcribe", {
+              method: "POST",
+              body: formData,
+            });
+
+            if (!res.ok) {
+              const error = await res.json();
+              console.error("Transcription failed:", error);
+              setIsTranscribing(false);
+              return;
+            }
+
+            const { transcript, pauseMap } = await res.json();
+            onSubmit?.({ type: "transcript", content: transcript, pauseMap });
+            setIsTranscribing(false);
+          } catch (error) {
+            console.error("Error sending audio:", error);
+            setIsTranscribing(false);
+          }
+        };
+
+        mediaRecorder.start();
+        mediaRecorderRef.current = mediaRecorder;
+        setIsRecording(true);
+      } catch (error) {
+        console.error("Microphone access denied:", error);
+      }
+    } else {
+      // Stop recording
+      if (mediaRecorderRef.current) {
+        mediaRecorderRef.current.stop();
+      }
+      setIsRecording(false);
+    }
   };
 
   const statusDot = (status: AnalysisAgentStep["status"]) => {
@@ -112,14 +166,23 @@ export function AnalysisPanel({
           {/* Mic */}
           <button
             onClick={toggleRecording}
-            title={isRecording ? "Stop recording" : "Record voice"}
+            disabled={isTranscribing}
+            title={isRecording ? "Stop recording" : isTranscribing ? "Transcribing..." : "Record voice"}
             className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
-              isRecording
+              isTranscribing
+                ? "bg-blue-100 text-blue-500"
+                : isRecording
                 ? "bg-red-100 text-red-500"
                 : "text-black/30 hover:text-black/60 hover:bg-black/5"
             }`}
           >
-            {isRecording ? <MicOff size={13} /> : <Mic size={13} />}
+            {isTranscribing ? (
+              <div className="w-3 h-3 rounded-full border border-blue-500/50 border-t-blue-500 animate-spin" />
+            ) : isRecording ? (
+              <MicOff size={13} />
+            ) : (
+              <Mic size={13} />
+            )}
           </button>
 
           {/* File upload */}
