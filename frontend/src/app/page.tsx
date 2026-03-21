@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { NeuroTraceSplash } from "@/components/neurotrace-splash";
 import { NeuroSidebar } from "@/components/neuro-sidebar";
@@ -9,13 +9,29 @@ import { AgentCard, MOCK_AGENTS } from "@/components/agent-card";
 import { AnalysisPanel, type AnalysisInput } from "@/components/analysis-panel";
 import { NeuroRadarChart } from "@/components/radar-chart";
 import GlassSurface from "@/components/GlassSurface";
+import type { RegionActivation } from "@/components/brain-viewer";
 
-// Heavy components — dynamic, no SSR
+// Brain regions: MNI coords are fixed from neuroimaging literature.
+// Agents only control activation intensity (0–1).
+const BRAIN_REGIONS: RegionActivation[] = [
+  { region: "Broca's area",    mni: [-44, 20, 8],    activation: 0.72, agent: "Lexical"   },
+  { region: "Wernicke's area", mni: [-54, -40, 14],  activation: 0.58, agent: "Semantic"  },
+  { region: "DLPFC",           mni: [-46, 20, 32],   activation: 0.83, agent: "Syntax"    },
+  { region: "SMA",             mni: [0, -4, 60],     activation: 0.44, agent: "Prosody"   },
+  { region: "Amygdala",        mni: [-24, -4, -22],  activation: 0.31, agent: "Affective" },
+];
+
+const AGENT_TO_SCORE_KEY: Record<string, string> = {
+  Lexical: "lexical",
+  Semantic: "semantic",
+  Prosody: "prosody",
+  Syntax: "syntax",
+  Affective: "affective",
+};
+
+// Heavy components — client only, no SSR
 const Dither = dynamic(() => import("@/components/Dither"), { ssr: false });
-const BrainViewer = dynamic(
-  () => import("@/components/brain-viewer").then((m) => ({ default: m.BrainViewer })),
-  { ssr: false }
-);
+const BrainViewer = dynamic(() => import("@/components/brain-viewer"), { ssr: false });
 
 type AgentStep = {
   name: string;
@@ -29,10 +45,23 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
+  const [activations, setActivations] = useState<RegionActivation[]>(BRAIN_REGIONS);
   const [biomarkerScores, setBiomarkerScores] = useState<Record<string, number> | undefined>();
   const [activePage, setActivePage] = useState("analysis");
 
-  // Shift+P toggles panels
+  const activeAgentName = useMemo(() => {
+    const running = agentSteps.find((s) => s.status === "running");
+    if (!running) return undefined;
+    const map: Record<string, string> = {
+      "Lexical agent": "Lexical",
+      "Semantic agent": "Semantic",
+      "Prosody agent": "Prosody",
+      "Syntax agent": "Syntax",
+    };
+    return map[running.name];
+  }, [agentSteps]);
+
+  // Shift+P toggles side panels
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.shiftKey && e.key === "P") {
@@ -44,7 +73,6 @@ export default function DashboardPage() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  // Auto-open panels when analysis starts
   useEffect(() => {
     if (hasStarted) setPanelsOpen(true);
   }, [hasStarted]);
@@ -54,6 +82,7 @@ export default function DashboardPage() {
       setHasStarted(true);
       setIsLoading(true);
       setBiomarkerScores(undefined);
+      setActivations(BRAIN_REGIONS); // reset to defaults while loading
       setAgentSteps([
         { name: "STT preprocessor", status: "running" },
         { name: "Lexical agent", status: "pending" },
@@ -69,17 +98,14 @@ export default function DashboardPage() {
           input.type === "text"
             ? { input_value: input.content, ...(sessionId ? { session_id: sessionId } : {}) }
             : input.type === "transcript"
-            ? {
-                transcript: input.content,
-                pause_map: input.pauseMap,
-                ...(sessionId ? { session_id: sessionId } : {}),
-              }
-            : null;
+              ? {
+                  transcript: input.content,
+                  pause_map: input.pauseMap,
+                  ...(sessionId ? { session_id: sessionId } : {}),
+                }
+              : null;
 
-        if (!body) {
-          setIsLoading(false);
-          return;
-        }
+        if (!body) { setIsLoading(false); return; }
 
         const res = await fetch("/api/analyze", {
           method: "POST",
@@ -87,12 +113,8 @@ export default function DashboardPage() {
           body: JSON.stringify(body),
         });
 
-        if (!res.body) {
-          setIsLoading(false);
-          return;
-        }
+        if (!res.body) { setIsLoading(false); return; }
 
-        // Stream NDJSON
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
@@ -107,20 +129,27 @@ export default function DashboardPage() {
                 prev.map((s) =>
                   s.name === event.step.name
                     ? { ...s, status: event.step.status, detail: event.step.detail }
-                    : s
-                )
+                    : s,
+                ),
               );
             } else if (event.type === "end") {
               if (event.session_id) setSessionId(event.session_id);
-              if (event.scores) setBiomarkerScores(event.scores);
-              setAgentSteps((prev) =>
-                prev.map((s) => ({ ...s, status: "done" as const }))
-              );
+              if (event.scores) {
+                const scores = event.scores as Record<string, number>;
+                setBiomarkerScores(scores);
+                setActivations(
+                  BRAIN_REGIONS.map((r) => ({
+                    ...r,
+                    activation: scores[AGENT_TO_SCORE_KEY[r.agent]] ?? r.activation,
+                  })),
+                );
+              }
+              setAgentSteps((prev) => prev.map((s) => ({ ...s, status: "done" as const })));
             } else if (event.type === "error") {
               setAgentSteps((prev) =>
                 prev.map((s) =>
-                  s.status === "running" ? { ...s, status: "error" as const } : s
-                )
+                  s.status === "running" ? { ...s, status: "error" as const } : s,
+                ),
               );
             }
           } catch {
@@ -143,15 +172,14 @@ export default function DashboardPage() {
         setIsLoading(false);
       }
     },
-    [sessionId]
+    [sessionId],
   );
 
   return (
     <div className="relative h-screen w-full overflow-hidden">
-      {/* Splash */}
       <NeuroTraceSplash />
 
-      {/* Dither background — fixed, full screen */}
+      {/* Dither background */}
       <div className="fixed inset-0 z-0 h-screen w-screen">
         <Dither
           waveSpeed={0.02}
@@ -187,134 +215,152 @@ export default function DashboardPage() {
               setPanelsOpen(false);
               setAgentSteps([]);
               setBiomarkerScores(undefined);
+              setActivations(BRAIN_REGIONS);
             }}
           />
         </GlassSurface>
 
         {/* Main area */}
         <div className="flex flex-col flex-1 min-w-0">
-          {/* Header */}
           <SiteHeader title="Cognitive Analysis" />
 
-          {/* Content */}
-          <div className="relative flex flex-1 min-h-0 flex-col items-center justify-center gap-4 px-4 pb-4">
-            {/* Left agent panels */}
+          <div className="relative flex-1 min-h-0 overflow-hidden">
+            {/* ═══ PHASE 1: Pre-submission ═══ */}
             <div
-              className={`absolute left-4 top-4 bottom-4 flex flex-col gap-4 transition-opacity duration-300 ease-out ${
-                panelsOpen ? "opacity-100" : "opacity-0 pointer-events-none"
-              }`}
-              style={{ width: "calc((100% - 42rem) / 2 - 2rem)" }}
+              className="absolute inset-0 flex flex-col items-center justify-center px-6 transition-all duration-[400ms] ease-out"
+              style={{
+                opacity: hasStarted ? 0 : 1,
+                transform: hasStarted ? "translateY(-20px)" : "translateY(0)",
+                pointerEvents: hasStarted ? "none" : "auto",
+              }}
+              aria-hidden={hasStarted}
             >
-              {[MOCK_AGENTS[0], MOCK_AGENTS[1]].map((agent, i) => (
-                <div key={i} className="flex-1 min-h-0">
-                  <GlassSurface
-                    width={"100%" as unknown as number}
-                    height={"100%" as unknown as number}
-                    borderRadius={16}
-                    className="overflow-hidden h-full"
-                    contentClassName="!p-0 !m-0 !items-start !justify-start"
-                  >
-                    <AgentCard {...agent} isActive={isLoading && i === 0} isLoading={isLoading && i === 0} />
-                  </GlassSurface>
-                </div>
-              ))}
+              <div className="mb-8 flex flex-col items-center gap-2" aria-hidden="true">
+                <span
+                  className="text-[28px] font-light tracking-[0.12em] text-black/15"
+                  style={{ fontFamily: "var(--font-syne), sans-serif" }}
+                >
+                  neurotrace
+                </span>
+                <span className="text-[11px] tracking-[0.3em] uppercase text-black/15 font-medium">
+                  cognitive signature analysis
+                </span>
+              </div>
+              <AnalysisPanel
+                onSubmit={handleSubmit}
+                isLoading={isLoading}
+                agentSteps={[]}
+                placeholder="Paste text or record speech to begin analysis…"
+              />
             </div>
 
-            {/* Center — brain viewer + radar chart */}
+            {/* ═══ PHASE 2: Post-submission ═══ */}
             <div
-              className={`transition-all duration-500 ${
-                panelsOpen ? "opacity-100" : "opacity-0"
-              }`}
-              style={{ width: "42rem", maxWidth: "100%" }}
+              className="absolute inset-0 grid transition-all duration-[400ms] ease-out"
+              style={{
+                opacity: hasStarted ? 1 : 0,
+                transform: hasStarted ? "translateY(0)" : "translateY(20px)",
+                pointerEvents: hasStarted ? "auto" : "none",
+                gridTemplateColumns: "1fr 2.4fr 1fr",
+                gridTemplateRows: "1fr",
+                gap: "12px",
+                padding: "12px",
+              }}
+              aria-hidden={!hasStarted}
             >
-              <div className="flex flex-col gap-3">
+              {/* Left column — Lexical + Semantic agents */}
+              <div
+                className="flex-col gap-3 min-h-0 hidden min-[1200px]:flex"
+                style={{
+                  opacity: panelsOpen ? 1 : 0,
+                  transition: "opacity 300ms ease-out",
+                }}
+              >
+                {[MOCK_AGENTS[0], MOCK_AGENTS[1]].map((agent, i) => (
+                  <div key={agent.agentName} className="flex-1 min-h-0">
+                    <GlassSurface
+                      width={"100%" as unknown as number}
+                      height={"100%" as unknown as number}
+                      borderRadius={16}
+                      className="overflow-hidden h-full"
+                      contentClassName="!p-0 !m-0 !items-start !justify-start"
+                    >
+                      <AgentCard
+                        {...agent}
+                        isActive={isLoading && activeAgentName === agent.agentName.replace(" Agent", "")}
+                        isLoading={isLoading && i === 0 && !biomarkerScores}
+                      />
+                    </GlassSurface>
+                  </div>
+                ))}
+              </div>
+
+              {/* Center column — Brain + Radar + Input */}
+              <div className="flex flex-col gap-3 min-h-0 col-span-full min-[1200px]:col-span-1">
+                {/* 3D Brain viewer (NiiVue) */}
+                <div className="flex-1 min-h-0 rounded-[20px] overflow-hidden bg-black/[0.03] border border-black/[0.04]">
+                  <BrainViewer
+                    activations={activations}
+                    activeAgentName={activeAgentName}
+                  />
+                </div>
+
+                {/* Radar chart */}
                 <GlassSurface
                   width={"100%" as unknown as number}
-                  height={340}
-                  borderRadius={20}
-                  opacity={0.6}
-                  blur={14}
-                  className="overflow-hidden"
+                  height={180}
+                  borderRadius={16}
+                  opacity={0.55}
+                  blur={12}
+                  className="overflow-hidden shrink-0"
                   contentClassName="!p-0"
                 >
-                  <BrainViewer />
+                  <div className="p-3 h-full flex flex-col">
+                    <span className="text-[10px] uppercase tracking-widest text-black/30 font-medium mb-1">
+                      Cognitive Domains
+                    </span>
+                    <NeuroRadarChart scores={biomarkerScores} isLoading={isLoading} />
+                  </div>
                 </GlassSurface>
 
-                {hasStarted ? (
-                  <GlassSurface
-                    width={"100%" as unknown as number}
-                    height={220}
-                    borderRadius={16}
-                    opacity={0.55}
-                    blur={12}
-                    className="overflow-hidden"
-                    contentClassName="!p-0"
-                  >
-                    <div className="p-4 h-full flex flex-col">
-                      <span className="text-[10px] uppercase tracking-widest text-black/30 font-medium mb-2">
-                        Cognitive Domains
-                      </span>
-                      <NeuroRadarChart scores={biomarkerScores} isLoading={isLoading} />
-                    </div>
-                  </GlassSurface>
-                ) : (
-                  <GlassSurface
-                    width={"100%" as unknown as number}
-                    height={220}
-                    borderRadius={16}
-                    opacity={0.55}
-                    blur={12}
-                    className="overflow-hidden"
-                    contentClassName="!p-0"
-                  >
-                    <div className="p-4 h-full flex items-center justify-center text-sm text-zinc-300">
-                      Brain model is loaded. Submit text or audio for cognitive analysis to see biomarker scores.
-                    </div>
-                  </GlassSurface>
-                )}
+                {/* Analysis input */}
+                <div className="shrink-0">
+                  <AnalysisPanel
+                    onSubmit={handleSubmit}
+                    isLoading={isLoading}
+                    agentSteps={agentSteps}
+                    placeholder="Ask about cognitive signature analysis…"
+                  />
+                </div>
+              </div>
+
+              {/* Right column — Prosody + Syntax agents */}
+              <div
+                className="flex-col gap-3 min-h-0 hidden min-[1200px]:flex"
+                style={{
+                  opacity: panelsOpen ? 1 : 0,
+                  transition: "opacity 300ms ease-out",
+                }}
+              >
+                {[MOCK_AGENTS[2], MOCK_AGENTS[3]].map((agent, i) => (
+                  <div key={agent.agentName} className="flex-1 min-h-0">
+                    <GlassSurface
+                      width={"100%" as unknown as number}
+                      height={"100%" as unknown as number}
+                      borderRadius={16}
+                      className="overflow-hidden h-full"
+                      contentClassName="!p-0 !m-0 !items-start !justify-start"
+                    >
+                      <AgentCard
+                        {...agent}
+                        isActive={isLoading && activeAgentName === agent.agentName.replace(" Agent", "")}
+                        isLoading={isLoading && i === 1 && !biomarkerScores}
+                      />
+                    </GlassSurface>
+                  </div>
+                ))}
               </div>
             </div>
-
-            {/* Right agent panels */}
-            <div
-              className={`absolute right-4 top-4 bottom-4 flex flex-col gap-4 transition-opacity duration-300 ease-out ${
-                panelsOpen ? "opacity-100" : "opacity-0 pointer-events-none"
-              }`}
-              style={{ width: "calc((100% - 42rem) / 2 - 2rem)" }}
-            >
-              {[MOCK_AGENTS[2], MOCK_AGENTS[3]].map((agent, i) => (
-                <div key={i} className="flex-1 min-h-0">
-                  <GlassSurface
-                    width={"100%" as unknown as number}
-                    height={"100%" as unknown as number}
-                    borderRadius={16}
-                    className="overflow-hidden h-full"
-                    contentClassName="!p-0 !m-0 !items-start !justify-start"
-                  >
-                    <AgentCard {...agent} isActive={isLoading && i === 1} isLoading={isLoading && i === 1} />
-                  </GlassSurface>
-                </div>
-              ))}
-            </div>
-
-            {/* Collapsing spacer */}
-            <div
-              className="transition-[flex-grow] duration-[1400ms] ease-in-out"
-              style={{ flexGrow: hasStarted ? 0 : 1, flexShrink: 0, flexBasis: 0 }}
-            />
-
-            {/* Analysis input panel */}
-            <AnalysisPanel
-              onSubmit={handleSubmit}
-              isLoading={isLoading}
-              agentSteps={agentSteps}
-              placeholder="Ask about cognitive signature analysis..."
-            />
-
-            <div
-              className="transition-[flex-grow] duration-[1400ms] ease-in-out"
-              style={{ flexGrow: hasStarted ? 0 : 0.5, flexShrink: 0, flexBasis: 0 }}
-            />
           </div>
         </div>
       </div>

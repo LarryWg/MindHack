@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@niivue/niivue": "^0.68.1",
     "@react-three/fiber": "^9.5.0",
     "@react-three/postprocessing": "^3.0.4",
     "@tabler/icons-react": "^3.40.0",
