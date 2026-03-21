@@ -227,19 +227,20 @@ export default function DashboardPage() {
               }`}
               style={{ width: "42rem", maxWidth: "100%" }}
             >
-              {hasStarted && (
-                <div className="flex flex-col gap-3">
-                  <GlassSurface
-                    width={"100%" as unknown as number}
-                    height={240}
-                    borderRadius={20}
-                    opacity={0.6}
-                    blur={14}
-                    className="overflow-hidden"
-                    contentClassName="!p-0"
-                  >
-                    <BrainViewer />
-                  </GlassSurface>
+              <div className="flex flex-col gap-3">
+                <GlassSurface
+                  width={"100%" as unknown as number}
+                  height={340}
+                  borderRadius={20}
+                  opacity={0.6}
+                  blur={14}
+                  className="overflow-hidden"
+                  contentClassName="!p-0"
+                >
+                  <BrainViewer />
+                </GlassSurface>
+
+                {hasStarted ? (
                   <GlassSurface
                     width={"100%" as unknown as number}
                     height={220}
@@ -256,8 +257,22 @@ export default function DashboardPage() {
                       <NeuroRadarChart scores={biomarkerScores} isLoading={isLoading} />
                     </div>
                   </GlassSurface>
-                </div>
-              )}
+                ) : (
+                  <GlassSurface
+                    width={"100%" as unknown as number}
+                    height={220}
+                    borderRadius={16}
+                    opacity={0.55}
+                    blur={12}
+                    className="overflow-hidden"
+                    contentClassName="!p-0"
+                  >
+                    <div className="p-4 h-full flex items-center justify-center text-sm text-zinc-300">
+                      Brain model is loaded. Submit text or audio for cognitive analysis to see biomarker scores.
+                    </div>
+                  </GlassSurface>
+                )}
+              </div>
             </div>
 
             {/* Right agent panels */}
