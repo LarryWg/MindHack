@@ -1,6 +1,7 @@
 import os
 import json
 import httpx
+import uuid
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -64,3 +65,33 @@ async def analyze(req: AnalyzeRequest):
         media_type="text/plain",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+class LangFlowRequest(BaseModel):
+    input_value: str
+    session_id: Optional[str] = None
+
+
+@app.post("/langflow-test")
+async def langflow_test(req: LangFlowRequest):
+    api_key = os.getenv("LANGFLOW_API_KEY", "YOUR_API_KEY_HERE")
+    url = "http://localhost:7860/api/v1/run/284e7b53-4a64-46b0-826a-d659918a5390"
+
+    payload = {
+        "output_type": "chat",
+        "input_type": "chat",
+        "input_value": req.input_value
+    }
+    payload["session_id"] = req.session_id or str(uuid.uuid4())
+
+    headers = {"x-api-key": api_key, "Content-Type": "application/json"}
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+            resp.raise_for_status()
+            return {"response": resp.text}
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=500, detail=f"Error making API request: {str(e)}")
+    except ValueError as e:
+        raise HTTPException(status_code=500, detail=f"Error parsing response: {str(e)}")
