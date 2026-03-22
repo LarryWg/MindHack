@@ -105,7 +105,7 @@ function BiomarkersPanel() {
       agent: "Lexical Agent",
       region: "Broca's Area",
       description: "Measures vocabulary richness and word choice patterns",
-      metrics: ["Type-Token Ratio (TTR)", "Lexical Density", "Filler Word Frequency"],
+      metrics: ["Type-Token Ratio (TTR)", "Lexical Density", "Filler Word Frequency", "Noun-to-Verb Ratio", "First-person Pronoun Ratio"],
       clinical: "Reduced diversity may indicate aphasia or cognitive decline",
       color: "#ff6b6b",
     },
@@ -115,7 +115,7 @@ function BiomarkersPanel() {
       agent: "Semantic Agent",
       region: "Wernicke's Area",
       description: "Evaluates meaning connectivity and conceptual relationships",
-      metrics: ["Idea Density", "Coherence Score", "Tangentiality Index"],
+      metrics: ["Idea Density", "Coherence Score", "Tangentiality Index", "Semantc Similarity Score", "Conceptual Repetition Rate (CRR)","Narrative Structure Score (NSS)"],
       clinical: "Disrupted coherence often seen in schizophrenia or dementia",
       color: "#f59e0b",
     },
@@ -293,7 +293,7 @@ function BiomarkersPanel() {
               </li>
               <li className="flex items-start gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-current opacity-50 shrink-0 mt-1.5" />
-                <span>Monitoring treatment response in clinical trials</span>
+                <span>Personal Reflection Tool used to track speech patterns over time</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-current opacity-50 shrink-0 mt-1.5" />
