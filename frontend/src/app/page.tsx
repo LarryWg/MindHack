@@ -497,42 +497,7 @@ export default function DashboardPage() {
               <div className="flex flex-col gap-2.5 min-w-0" style={{ flex: "2 0 0%" }}>
                 {/* Agent cards horizontal scroll */}
                 <div className="relative shrink-0">
-                  <div className="flex items-center gap-2 mb-2">
-                    <button
-                      onClick={prevAgent}
-                      className="w-6 h-6 rounded-full bg-black/5 hover:bg-black/10 flex items-center justify-center transition-colors"
-                      aria-label="Previous agent"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M15 18l-6-6 6-6"/>
-                      </svg>
-                    </button>
-                    
-                    <div className="flex-1 flex justify-center gap-1">
-                      {MOCK_AGENTS.map((_, index) => (
-                        <button
-                          key={index}
-                          onClick={() => setCurrentAgentIndex(index)}
-                          className={`w-2 h-2 rounded-full transition-colors ${
-                            index === currentAgentIndex ? 'bg-black/40' : 'bg-black/10'
-                          }`}
-                          aria-label={`Go to agent ${index + 1}`}
-                        />
-                      ))}
-                    </div>
-                    
-                    <button
-                      onClick={nextAgent}
-                      className="w-6 h-6 rounded-full bg-black/5 hover:bg-black/10 flex items-center justify-center transition-colors"
-                      aria-label="Next agent"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M9 18l6-6-6-6"/>
-                      </svg>
-                    </button>
-                  </div>
-                  
-                  <div className="overflow-hidden rounded-xl">
+                  <div className="overflow-hidden rounded-xl relative" style={{ minHeight: "200px" }}>
                     <div 
                       className="flex transition-transform duration-300 ease-in-out"
                       style={{ transform: `translateX(-${currentAgentIndex * 100}%)` }}
@@ -545,6 +510,42 @@ export default function DashboardPage() {
                           />
                         </div>
                       ))}
+                    </div>
+                    
+                    {/* Navigation controls inside the box */}
+                    <div className="absolute bottom-3 left-0 right-0 flex items-center justify-center gap-2">
+                      <button
+                        onClick={prevAgent}
+                        className="w-6 h-6 rounded-full bg-black/20 hover:bg-black/30 flex items-center justify-center transition-colors backdrop-blur"
+                        aria-label="Previous agent"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'rgba(0,0,0,0.6)' }}>
+                          <path d="M15 18l-6-6 6-6"/>
+                        </svg>
+                      </button>
+                      
+                      <div className="flex justify-center gap-1 px-2">
+                        {MOCK_AGENTS.map((_, index) => (
+                          <button
+                            key={index}
+                            onClick={() => setCurrentAgentIndex(index)}
+                            className={`w-2 h-2 rounded-full transition-colors backdrop-blur ${
+                              index === currentAgentIndex ? 'bg-black/50' : 'bg-black/25'
+                            }`}
+                            aria-label={`Go to agent ${index + 1}`}
+                          />
+                        ))}
+                      </div>
+                      
+                      <button
+                        onClick={nextAgent}
+                        className="w-6 h-6 rounded-full bg-black/20 hover:bg-black/30 flex items-center justify-center transition-colors backdrop-blur"
+                        aria-label="Next agent"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'rgba(0,0,0,0.6)' }}>
+                          <path d="M9 18l6-6-6-6"/>
+                        </svg>
+                      </button>
                     </div>
                   </div>
                 </div>
