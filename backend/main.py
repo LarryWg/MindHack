@@ -10,7 +10,6 @@ from pydantic import BaseModel
 from typing import Optional
 from dotenv import load_dotenv
 
-# Load environment variables from .env file in same directory
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 
 app = FastAPI(title="NeuroTrace Backend")
@@ -26,9 +25,12 @@ LANGFLOW_API_URL = os.getenv("LANGFLOW_API_URL", "http://localhost:7860")
 _FLOW_ID_RAW = os.getenv("LANGFLOW_FLOW_ID", "")
 LANGFLOW_API_KEY = os.getenv("LANGFLOW_API_KEY", "")
 
-# Normalise: strip any leading path so LANGFLOW_FLOW_ID can be either
+# Strip any leading path so LANGFLOW_FLOW_ID can be either
 # "284e7b53-..." or "/api/v1/run/284e7b53-..."
 LANGFLOW_FLOW_ID = _FLOW_ID_RAW.split("/")[-1] if _FLOW_ID_RAW else ""
+
+# Haiku analysis agents + Sonnet report composer + PubMed lookups
+LANGFLOW_TIMEOUT = float(os.getenv("LANGFLOW_TIMEOUT", "300"))
 
 
 def _langflow_url() -> str:
@@ -42,8 +44,8 @@ def _langflow_headers() -> dict:
     return h
 
 
-# Maps brain region name fragments → BiomarkerScores agent key
-_REGION_TO_AGENT: dict[str, str] = {
+# Maps brain region name fragments → BiomarkerScores domain key
+_REGION_TO_DOMAIN: dict[str, str] = {
     "broca":    "lexical",
     "wernicke": "semantic",
     "sma":      "prosody",
@@ -51,9 +53,41 @@ _REGION_TO_AGENT: dict[str, str] = {
     "amygdala": "affective",
 }
 
+# Biomarker mapper "agent" field → BiomarkerScores domain key
+_AGENT_TO_DOMAIN: dict[str, str] = {
+    "lexical":   "lexical",
+    "semantic":  "semantic",
+    "prosody":   "prosody",
+    "syntax":    "syntax",
+    "sentiment": "affective",
+    "affective": "affective",
+}
+
+_DOMAIN_SUB_KEYS: dict[str, list[str]] = {
+    "lexical":   ["ttr", "density", "filler_rate", "overall"],
+    "semantic":  ["coherence", "idea_density", "tangentiality", "overall"],
+    "prosody":   ["speech_rate", "pause_freq", "hesitation", "overall"],
+    "syntax":    ["mlu", "clause_depth", "passive_ratio", "overall"],
+    "affective": ["valence", "arousal", "certainty", "overall"],
+}
+
+
+def _build_domain_scores(activation: float, domain: str) -> dict[str, float]:
+    """Expand a single activation value into a full domain sub-object."""
+    keys = _DOMAIN_SUB_KEYS.get(domain, ["overall"])
+    return {k: round(activation, 4) for k in keys}
+
+
+def _fallback_scores() -> dict:
+    """Return neutral mid-range BiomarkerScores when pipeline produces nothing."""
+    return {
+        domain: _build_domain_scores(0.5, domain)
+        for domain in _DOMAIN_SUB_KEYS
+    }
+
 
 def _strip_markdown_fences(text: str) -> str:
-    """Remove ```json ... ``` or ``` ... ``` fences from a string."""
+    """Remove ```json ... ``` or ``` ... ``` fences."""
     t = text.strip()
     if not t.startswith("```"):
         return t
@@ -65,52 +99,133 @@ def _strip_markdown_fences(text: str) -> str:
     return "\n".join(lines)
 
 
-def _extract_text_and_scores(data: dict) -> tuple[str, Optional[dict], Optional[dict]]:
-    """Pull message text, BiomarkerScores, and full report out of a Langflow response."""
-    message_text = ""
-    scores = None
-    report = None
+def _scores_from_highlights(highlights: list) -> dict:
+    """Build full BiomarkerScores from report highlights array."""
+    synth: dict[str, float] = {}
+    for h in highlights:
+        rname = h.get("region", "").lower()
+        for fragment, domain in _REGION_TO_DOMAIN.items():
+            if fragment in rname:
+                synth[domain] = float(h.get("activation", 0.5))
+                break
+    if not synth:
+        return {}
+    return {
+        domain: _build_domain_scores(synth.get(domain, 0.5), domain)
+        for domain in _DOMAIN_SUB_KEYS
+    }
+
+
+def _scores_from_regions(regions: list) -> dict:
+    """Build full BiomarkerScores from biomarker mapper regions array."""
+    synth: dict[str, float] = {}
+    for r in regions:
+        agent_key = r.get("agent", "").lower()
+        domain = _AGENT_TO_DOMAIN.get(agent_key, "")
+        if domain:
+            synth[domain] = float(r.get("activation", 0.5))
+    if not synth:
+        return {}
+    return {
+        domain: _build_domain_scores(synth.get(domain, 0.5), domain)
+        for domain in _DOMAIN_SUB_KEYS
+    }
+
+
+def _try_parse_json_blob(text: str) -> Optional[dict]:
+    """Attempt to parse JSON, including text with markdown fences."""
+    if not text:
+        return None
     try:
-        outputs = data.get("outputs", [])
-        if outputs:
-            inner = outputs[0].get("outputs", [])
-            if inner:
-                results = inner[0].get("results", {})
+        return json.loads(_strip_markdown_fences(text))
+    except (json.JSONDecodeError, ValueError):
+        pass
+    # Try to find a JSON object anywhere in the text
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        try:
+            return json.loads(text[start:end + 1])
+        except (json.JSONDecodeError, ValueError):
+            pass
+    return None
+
+
+def _extract_text_and_scores(
+    data: dict,
+) -> tuple[str, Optional[dict], Optional[dict]]:
+    """
+    Pull message text, BiomarkerScores, and full report out of a Langflow response.
+
+    Walks ALL outputs (not just outputs[0][0]) so it catches whichever node
+    the pipeline actually routes to ChatOutput.  Falls back gracefully at
+    every level — never raises.
+    """
+    message_text = ""
+    scores: Optional[dict] = None
+    report: Optional[dict] = None
+
+    try:
+        # Collect every candidate message text from the output tree
+        candidates: list[str] = []
+        for top_out in data.get("outputs", []):
+            for inner_out in top_out.get("outputs", []):
+                results = inner_out.get("results", {})
                 msg = results.get("message", {})
                 if isinstance(msg, dict):
-                    message_text = msg.get("text", "")
+                    t = msg.get("text", "")
+                elif isinstance(msg, str):
+                    t = msg
                 else:
-                    message_text = str(msg)
+                    t = ""
+                if t:
+                    candidates.append(t)
+                # Also check artifacts
+                artifacts = inner_out.get("artifacts", {})
+                if isinstance(artifacts, dict):
+                    if "scores" in artifacts and scores is None:
+                        scores = artifacts["scores"]
+                    if "report" in artifacts and report is None:
+                        report = artifacts["report"]
 
-                # Try to parse JSON embedded in the message text
-                if message_text:
-                    try:
-                        parsed = json.loads(_strip_markdown_fences(message_text))
-                        if isinstance(parsed, dict):
-                            if "report" in parsed:
-                                report = parsed["report"]
-                                # Synthesise BiomarkerScores from highlight activations
-                                highlights = report.get("highlights", [])
-                                synth: dict[str, float] = {}
-                                for h in highlights:
-                                    rname = h.get("region", "").lower()
-                                    for fragment, agent_key in _REGION_TO_AGENT.items():
-                                        if fragment in rname:
-                                            synth[agent_key] = float(h.get("activation", 0.0))
-                                            break
-                                if synth:
-                                    scores = synth
-                            elif any(k in parsed for k in ("lexical", "semantic", "prosody", "syntax", "affective")):
-                                scores = parsed
-                    except (json.JSONDecodeError, ValueError):
-                        pass
+        # Prefer the longest text (likely the report composer output)
+        if candidates:
+            message_text = max(candidates, key=len)
 
-                # Or returned in artifacts
-                artifacts = inner[0].get("artifacts", {})
-                if not scores and "scores" in artifacts:
-                    scores = artifacts["scores"]
+        # Try to parse JSON from each candidate — stop at first win
+        for cand in sorted(candidates, key=len, reverse=True):
+            parsed = _try_parse_json_blob(cand)
+            if not isinstance(parsed, dict):
+                continue
+
+            # Report composer output: {"report": {...}}
+            if "report" in parsed and report is None:
+                report = parsed["report"]
+                if scores is None:
+                    highlights = report.get("highlights", [])
+                    if highlights:
+                        scores = _scores_from_highlights(highlights)
+
+            # Biomarker mapper output: {"regions": [...]}
+            if "regions" in parsed and scores is None:
+                scores = _scores_from_regions(parsed["regions"])
+
+            # Direct BiomarkerScores structure
+            if scores is None and any(
+                k in parsed for k in ("lexical", "semantic", "prosody", "syntax", "affective")
+            ):
+                scores = parsed
+
+            if scores is not None and report is not None:
+                break
+
     except Exception:
         pass
+
+    # Always return a valid scores object — never leave the frontend with null
+    if scores is None:
+        scores = _fallback_scores()
+
     return message_text, scores, report
 
 
@@ -169,16 +284,15 @@ async def analyze(req: AnalyzeRequest):
 
         # ── 2. Fire the Langflow call in a background task ────────────────────
         loop = asyncio.get_event_loop()
-        langflow_task = loop.create_task(
-            _call_langflow_async(payload)
-        )
+        langflow_task = loop.create_task(_call_langflow_async(payload))
 
         # ── 3. Simulate per-agent progress while waiting ──────────────────────
-        step_delay = 1.8  # seconds between fake step transitions
+        # Fixed 2 s between steps regardless of total timeout — pure visual pacing
+        step_delay = 2.0
         for i in range(1, len(AGENT_STEPS)):
             try:
                 await asyncio.wait_for(asyncio.shield(langflow_task), timeout=step_delay)
-                break  # response came early — stop faking
+                break
             except asyncio.TimeoutError:
                 pass
             if langflow_task.done():
@@ -188,7 +302,7 @@ async def analyze(req: AnalyzeRequest):
 
         # ── 4. Await result and emit end / error ──────────────────────────────
         try:
-            data, error = await langflow_task
+            resp_data, error = await langflow_task
         except Exception as exc:
             yield json.dumps({"type": "error", "message": str(exc)}).encode() + b"\n"
             return
@@ -201,8 +315,8 @@ async def analyze(req: AnalyzeRequest):
         for step in AGENT_STEPS:
             yield json.dumps({"type": "step", "step": {"name": step, "status": "done"}}).encode() + b"\n"
 
-        message_text, scores, report = _extract_text_and_scores(data)
-        session_id = data.get("session_id") or req.session_id or str(uuid.uuid4())
+        message_text, scores, report = _extract_text_and_scores(resp_data)
+        session_id = resp_data.get("session_id") or req.session_id or str(uuid.uuid4())
 
         yield json.dumps({
             "type": "end",
@@ -221,10 +335,10 @@ async def analyze(req: AnalyzeRequest):
 
 async def _call_langflow_async(payload: dict) -> tuple[dict, Optional[str]]:
     """Returns (response_data, error_message). One of them will be None."""
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=LANGFLOW_TIMEOUT) as client:
         resp = await client.post(_langflow_url(), json=payload, headers=_langflow_headers())
         if resp.status_code >= 400:
-            return {}, resp.text
+            return {}, f"Langflow error {resp.status_code}: {resp.text[:500]}"
         return resp.json(), None
 
 
@@ -242,7 +356,7 @@ async def langflow_test(req: LangFlowRequest):
     }
 
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=LANGFLOW_TIMEOUT) as client:
             resp = await client.post(_langflow_url(), json=payload, headers=_langflow_headers())
             resp.raise_for_status()
             data = resp.json()

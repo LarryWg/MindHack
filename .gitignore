@@ -2,7 +2,7 @@
 .env
 .env.local
 .env.*.local
-
+langflow.json
 # Dependencies
 node_modules/
 __pycache__/
