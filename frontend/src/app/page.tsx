@@ -93,7 +93,221 @@ type AgentStep = {
   detail?: string;
 };
 
-// ─── Brain Regions Information Panel ──────────────────────────────────────────
+// ─── Biomarkers Information Panel ────────────────────────────────────────────
+
+function BiomarkersPanel() {
+  const biomarkers = [
+    {
+      id: "lexical",
+      name: "Lexical Diversity",
+      agent: "Lexical Agent",
+      region: "Broca's Area",
+      description: "Measures vocabulary richness and word choice patterns",
+      metrics: ["Type-Token Ratio (TTR)", "Lexical Density", "Filler Word Frequency"],
+      clinical: "Reduced diversity may indicate aphasia or cognitive decline",
+      color: "#ff6b6b",
+    },
+    {
+      id: "semantic",
+      name: "Semantic Coherence",
+      agent: "Semantic Agent",
+      region: "Wernicke's Area",
+      description: "Evaluates meaning connectivity and conceptual relationships",
+      metrics: ["Idea Density", "Coherence Score", "Tangentiality Index"],
+      clinical: "Disrupted coherence often seen in schizophrenia or dementia",
+      color: "#f59e0b",
+    },
+    {
+      id: "syntax",
+      name: "Syntactic Complexity",
+      agent: "Syntax Agent",
+      region: "DLPFC",
+      description: "Analyzes grammatical structure and sentence organization",
+      metrics: ["Mean Length of Utterance (MLU)", "Clause Density", "Passive Voice Usage"],
+      clinical: "Simplified syntax may indicate cognitive impairment",
+      color: "#00e5ff",
+    },
+    {
+      id: "prosody",
+      name: "Prosodic Features",
+      agent: "Prosody Agent",
+      region: "SMA",
+      description: "Assesses speech rhythm, timing, and intonation patterns",
+      metrics: ["Speech Rate (wpm)", "Pause Frequency", "Hesitation Duration"],
+      clinical: "Abnormal prosody common in Parkinson's and depression",
+      color: "#1d9e75",
+    },
+    {
+      id: "affective",
+      name: "Affective Markers",
+      agent: "Affective Agent",
+      region: "Amygdala",
+      description: "Monitors emotional tone and affective expression patterns",
+      metrics: ["Valence Score", "Arousal Level", "Emotional Intensity"],
+      clinical: "Altered affective markers seen in mood disorders",
+      color: "#a855f7",
+    },
+  ];
+
+  return (
+    <div className="h-full overflow-y-auto p-6">
+      <div className="max-w-4xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-2xl font-semibold mb-2" style={{ color: "var(--nt-text-hi)" }}>
+            Cognitive Biomarkers
+          </h1>
+          <p className="text-sm" style={{ color: "var(--nt-text-md)" }}>
+            Quantitative measures of cognitive function derived from speech and language analysis.
+            Each biomarker provides insights into specific aspects of neural processing and cognitive health.
+          </p>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-1">
+          {biomarkers.map((biomarker) => (
+            <div
+              key={biomarker.id}
+              className="rounded-xl p-6"
+              style={{
+                background: "var(--nt-glass)",
+                backdropFilter: "blur(18px)",
+                border: "1px solid var(--nt-glass-border)",
+                boxShadow: "var(--nt-glass-shadow)",
+              }}
+            >
+              <div className="flex items-start gap-4">
+                <div
+                  className="w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-sm shrink-0"
+                  style={{ backgroundColor: biomarker.color }}
+                >
+                  {biomarker.id.charAt(0).toUpperCase()}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-lg font-semibold mb-1" style={{ color: "var(--nt-text-hi)" }}>
+                    {biomarker.name}
+                  </h3>
+
+                  <div className="mb-3">
+                    <span
+                      className="inline-block px-2 py-1 rounded-md text-xs font-medium mr-2"
+                      style={{
+                        backgroundColor: `${biomarker.color}20`,
+                        color: biomarker.color,
+                        border: `1px solid ${biomarker.color}30`,
+                      }}
+                    >
+                      {biomarker.agent}
+                    </span>
+                    <span
+                      className="inline-block px-2 py-1 rounded-md text-xs font-medium"
+                      style={{
+                        backgroundColor: "rgba(0,0,0,0.05)",
+                        color: "var(--nt-text-md)",
+                        border: "1px solid rgba(0,0,0,0.1)",
+                      }}
+                    >
+                      {biomarker.region}
+                    </span>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <h4 className="text-sm font-medium mb-1" style={{ color: "var(--nt-text-hi)" }}>
+                        Description
+                      </h4>
+                      <p className="text-sm" style={{ color: "var(--nt-text-md)" }}>
+                        {biomarker.description}
+                      </p>
+                    </div>
+
+                    <div>
+                      <h4 className="text-sm font-medium mb-1" style={{ color: "var(--nt-text-hi)" }}>
+                        Key Metrics
+                      </h4>
+                      <ul className="text-sm space-y-0.5" style={{ color: "var(--nt-text-md)" }}>
+                        {biomarker.metrics.map((metric, index) => (
+                          <li key={index} className="flex items-center gap-2">
+                            <span className="w-1 h-1 rounded-full bg-current opacity-50 shrink-0" />
+                            {metric}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div>
+                      <h4 className="text-sm font-medium mb-1" style={{ color: "var(--nt-text-hi)" }}>
+                        Clinical Significance
+                      </h4>
+                      <p className="text-sm" style={{ color: "var(--nt-text-md)" }}>
+                        {biomarker.clinical}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-8 grid gap-6 md:grid-cols-2">
+          <div className="p-6 rounded-xl" style={{
+            background: "var(--nt-glass)",
+            backdropFilter: "blur(18px)",
+            border: "1px solid var(--nt-glass-border)",
+            boxShadow: "var(--nt-glass-shadow)",
+          }}>
+            <h2 className="text-lg font-semibold mb-3" style={{ color: "var(--nt-text-hi)" }}>
+              Biomarker Calculation
+            </h2>
+            <div className="space-y-3 text-sm" style={{ color: "var(--nt-text-md)" }}>
+              <p>
+                <strong>Automated Analysis:</strong> Machine learning algorithms process speech
+                and text input to extract quantitative features.
+              </p>
+              <p>
+                <strong>Normalization:</strong> Raw metrics are normalized against healthy
+                population baselines for comparative assessment.
+              </p>
+              <p>
+                <strong>Scoring:</strong> Results are scaled 0-100, where higher scores
+                indicate greater deviation from normal patterns.
+              </p>
+            </div>
+          </div>
+
+          <div className="p-6 rounded-xl" style={{
+            background: "var(--nt-glass)",
+            backdropFilter: "blur(18px)",
+            border: "1px solid var(--nt-glass-border)",
+            boxShadow: "var(--nt-glass-shadow)",
+          }}>
+            <h2 className="text-lg font-semibold mb-3" style={{ color: "var(--nt-text-hi)" }}>
+              Research Applications
+            </h2>
+            <ul className="space-y-2 text-sm" style={{ color: "var(--nt-text-md)" }}>
+              <li className="flex items-start gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-current opacity-50 shrink-0 mt-1.5" />
+                <span>Early detection of neurodegenerative diseases</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-current opacity-50 shrink-0 mt-1.5" />
+                <span>Monitoring treatment response in clinical trials</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-current opacity-50 shrink-0 mt-1.5" />
+                <span>Objective assessment of cognitive rehabilitation</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-current opacity-50 shrink-0 mt-1.5" />
+                <span>Population-level cognitive health screening</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function BrainRegionsPanel() {
   const regions = [
@@ -600,15 +814,28 @@ export default function DashboardPage() {
               <BrainRegionsPanel />
             </div>
 
+            {/* ══════ BIOMARKERS VIEW ══════ */}
+            <div
+              className="absolute inset-0 transition-all duration-[350ms] ease-out"
+              style={{
+                opacity: activePage === "biomarkers" ? 1 : 0,
+                transform: activePage === "biomarkers" ? "none" : "translateY(12px)",
+                pointerEvents: activePage === "biomarkers" ? "auto" : "none",
+              }}
+              aria-hidden={activePage !== "biomarkers"}
+            >
+              <BiomarkersPanel />
+            </div>
+
             {/* ══════ PHASE 1 — Pre-submission, centred ══════ */}
             <div
               className="absolute inset-0 flex flex-col items-center justify-center px-8 transition-all duration-[400ms] ease-out"
               style={{
-                opacity: hasStarted || activePage === "history" || activePage === "brain regions" ? 0 : 1,
+                opacity: hasStarted || activePage === "history" || activePage === "brain regions" || activePage === "biomarkers" ? 0 : 1,
                 transform: hasStarted ? "translateY(-24px)" : "translateY(0)",
-                pointerEvents: hasStarted || activePage === "history" || activePage === "brain regions" ? "none" : "auto",
+                pointerEvents: hasStarted || activePage === "history" || activePage === "brain regions" || activePage === "biomarkers" ? "none" : "auto",
               }}
-              aria-hidden={hasStarted || activePage === "history" || activePage === "brain regions"}
+              aria-hidden={hasStarted || activePage === "history" || activePage === "brain regions" || activePage === "biomarkers"}
             >
               <div className="mb-8 flex flex-col items-center gap-2">
                 <span
@@ -636,12 +863,12 @@ export default function DashboardPage() {
             <div
               className="absolute inset-0 flex gap-2.5 transition-all duration-[400ms] ease-out"
               style={{
-                opacity: hasStarted && activePage !== "history" && activePage !== "brain regions" ? 1 : 0,
+                opacity: hasStarted && activePage !== "history" && activePage !== "brain regions" && activePage !== "biomarkers" ? 1 : 0,
                 transform: hasStarted ? "none" : "translateY(24px)",
-                pointerEvents: hasStarted && activePage !== "history" && activePage !== "brain regions" ? "auto" : "none",
+                pointerEvents: hasStarted && activePage !== "history" && activePage !== "brain regions" && activePage !== "biomarkers" ? "auto" : "none",
                 padding: "10px",
               }}
-              aria-hidden={!hasStarted || activePage === "history" || activePage === "brain regions"}
+              aria-hidden={!hasStarted || activePage === "history" || activePage === "brain regions" || activePage === "biomarkers"}
             >
               {/* ── LEFT: Brain hero (60%) ── */}
               <div

@@ -91,7 +91,6 @@ export function NeuroSidebar({
         {[
           { title: "Brain Regions", icon: Brain, url: "#" },
           { title: "Biomarkers", icon: Activity, url: "#" },
-          { title: "Reports", icon: FileText, url: "#" },
         ].map((item) => {
           const Icon = item.icon;
           return (
