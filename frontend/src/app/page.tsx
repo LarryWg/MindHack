@@ -132,6 +132,15 @@ export default function DashboardPage() {
   const [activePage, setActivePage] = useState("analysis");
   const [cognitiveReport, setCognitiveReport] = useState<CognitiveReport | undefined>();
   const [useLangFlowTest, setUseLangFlowTest] = useState(false);
+  const [currentAgentIndex, setCurrentAgentIndex] = useState(0);
+
+  const nextAgent = useCallback(() => {
+    setCurrentAgentIndex((prev) => (prev + 1) % MOCK_AGENTS.length);
+  }, []);
+
+  const prevAgent = useCallback(() => {
+    setCurrentAgentIndex((prev) => (prev - 1 + MOCK_AGENTS.length) % MOCK_AGENTS.length);
+  }, []);
 
   const activeAgentName = useMemo(() => {
     const running = agentSteps.find((s) => s.status === "running");
@@ -486,15 +495,58 @@ export default function DashboardPage() {
 
               {/* ── RIGHT: Agents + waveform + input (40%) ── */}
               <div className="flex flex-col gap-2.5 min-w-0" style={{ flex: "2 0 0%" }}>
-                {/* Agent cards 2×2 grid */}
-                <div className="grid grid-cols-2 gap-2 shrink-0" style={{ gridTemplateRows: "auto auto" }}>
-                  {MOCK_AGENTS.map((agent) => (
-                    <MiniAgentCard
-                      key={agent.agentName}
-                      agent={agent}
-                      isActive={isLoading && activeAgentName === agent.agentName.replace(" Agent", "")}
-                    />
-                  ))}
+                {/* Agent cards horizontal scroll */}
+                <div className="relative shrink-0">
+                  <div className="flex items-center gap-2 mb-2">
+                    <button
+                      onClick={prevAgent}
+                      className="w-6 h-6 rounded-full bg-black/5 hover:bg-black/10 flex items-center justify-center transition-colors"
+                      aria-label="Previous agent"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M15 18l-6-6 6-6"/>
+                      </svg>
+                    </button>
+                    
+                    <div className="flex-1 flex justify-center gap-1">
+                      {MOCK_AGENTS.map((_, index) => (
+                        <button
+                          key={index}
+                          onClick={() => setCurrentAgentIndex(index)}
+                          className={`w-2 h-2 rounded-full transition-colors ${
+                            index === currentAgentIndex ? 'bg-black/40' : 'bg-black/10'
+                          }`}
+                          aria-label={`Go to agent ${index + 1}`}
+                        />
+                      ))}
+                    </div>
+                    
+                    <button
+                      onClick={nextAgent}
+                      className="w-6 h-6 rounded-full bg-black/5 hover:bg-black/10 flex items-center justify-center transition-colors"
+                      aria-label="Next agent"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M9 18l6-6-6-6"/>
+                      </svg>
+                    </button>
+                  </div>
+                  
+                  <div className="overflow-hidden rounded-xl">
+                    <div 
+                      className="flex transition-transform duration-300 ease-in-out"
+                      style={{ transform: `translateX(-${currentAgentIndex * 100}%)` }}
+                    >
+                      {MOCK_AGENTS.map((agent) => (
+                        <div key={agent.agentName} className="w-full flex-shrink-0">
+                          <MiniAgentCard
+                            agent={agent}
+                            isActive={isLoading && activeAgentName === agent.agentName.replace(" Agent", "")}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Waveform + transcript (only when voice analysed) */}
