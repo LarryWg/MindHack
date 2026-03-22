@@ -10,6 +10,7 @@ import { AnalysisPanel, type AnalysisInput, type WordTimestamp } from "@/compone
 import { WaveformPanel } from "@/components/waveform-panel";
 import { ReportPanel, type CognitiveReport } from "@/components/report-panel";
 import { HistoryPanel } from "@/components/history-panel";
+import { DashboardView } from "@/components/dashboard-view";
 import GlassSurface from "@/components/GlassSurface";
 import type { RegionActivation } from "@/components/brain-viewer";
 import { useAnalysisHistory } from "@/hooks/useAnalysisHistory";
@@ -569,6 +570,25 @@ export default function DashboardPage() {
 
           <div className="relative flex-1 min-h-0 overflow-hidden">
 
+            {/* ══════ DASHBOARD VIEW ══════ */}
+            <div
+              className="absolute inset-0 transition-all duration-[350ms] ease-out"
+              style={{
+                opacity: activePage === "dashboard" ? 1 : 0,
+                transform: activePage === "dashboard" ? "none" : "translateY(12px)",
+                pointerEvents: activePage === "dashboard" ? "auto" : "none",
+              }}
+              aria-hidden={activePage !== "dashboard"}
+            >
+              <DashboardView
+                entries={historyEntries}
+                onStartAnalysis={() => {
+                  setActivePage("analysis");
+                  setHasStarted(false);
+                }}
+              />
+            </div>
+
             {/* ══════ HISTORY VIEW ══════ */}
             <div
               className="absolute inset-0 transition-all duration-[350ms] ease-out"
@@ -604,22 +624,29 @@ export default function DashboardPage() {
             <div
               className="absolute inset-0 flex flex-col items-center justify-center px-8 transition-all duration-[400ms] ease-out"
               style={{
-                opacity: hasStarted || activePage === "history" || activePage === "brain regions" ? 0 : 1,
+                opacity: hasStarted || activePage === "history" || activePage === "brain regions" || activePage === "dashboard" ? 0 : 1,
                 transform: hasStarted ? "translateY(-24px)" : "translateY(0)",
-                pointerEvents: hasStarted || activePage === "history" || activePage === "brain regions" ? "none" : "auto",
+                pointerEvents: hasStarted || activePage === "history" || activePage === "brain regions" || activePage === "dashboard" ? "none" : "auto",
               }}
-              aria-hidden={hasStarted || activePage === "history" || activePage === "brain regions"}
+              aria-hidden={hasStarted || activePage === "history" || activePage === "brain regions" || activePage === "dashboard"}
             >
               <div className="mb-8 flex flex-col items-center gap-2">
                 <span
                   className="text-[30px] font-light tracking-[0.14em]"
-                  style={{ fontFamily: "var(--font-syne), sans-serif", color: "var(--nt-text-md)" }}
+                  style={{
+                    fontFamily: "var(--font-syne), sans-serif",
+                    color: "var(--nt-text-hi)",
+                    textShadow: "0 0 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.14)",
+                  }}
                 >
                   neurotrace
                 </span>
                 <span
                   className="text-[11px] tracking-[0.32em] uppercase font-medium"
-                  style={{ color: "var(--nt-text-xs)" }}
+                  style={{
+                    color: "var(--nt-text-md)",
+                    textShadow: "0 1px 4px rgba(0,0,0,0.12)",
+                  }}
                 >
                   cognitive signature analysis
                 </span>
@@ -636,12 +663,12 @@ export default function DashboardPage() {
             <div
               className="absolute inset-0 flex gap-2.5 transition-all duration-[400ms] ease-out"
               style={{
-                opacity: hasStarted && activePage !== "history" && activePage !== "brain regions" ? 1 : 0,
+                opacity: hasStarted && activePage !== "history" && activePage !== "brain regions" && activePage !== "dashboard" ? 1 : 0,
                 transform: hasStarted ? "none" : "translateY(24px)",
-                pointerEvents: hasStarted && activePage !== "history" && activePage !== "brain regions" ? "auto" : "none",
+                pointerEvents: hasStarted && activePage !== "history" && activePage !== "brain regions" && activePage !== "dashboard" ? "auto" : "none",
                 padding: "10px",
               }}
-              aria-hidden={!hasStarted || activePage === "history" || activePage === "brain regions"}
+              aria-hidden={!hasStarted || activePage === "history" || activePage === "brain regions" || activePage === "dashboard"}
             >
               {/* ── LEFT: Brain hero (60%) ── */}
               <div
