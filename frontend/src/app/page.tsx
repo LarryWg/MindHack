@@ -469,7 +469,7 @@ export default function DashboardPage() {
                     </div>
                     
                     {/* Navigation controls inside the box */}
-                    <div className="absolute inset-0 flex items-center justify-between px-2 pointer-events-none">
+                    <div className="absolute inset-0 flex items-end justify-between px-2 pb-18 pointer-events-none">
                       <button
                         onClick={prevAgent}
                         className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-all duration-200 backdrop-blur border border-white/30 shadow-lg pointer-events-auto"
