@@ -384,18 +384,48 @@ function BrainRegionsPanel() {
                 boxShadow: "var(--nt-glass-shadow)",
               }}
             >
-              <div className="flex items-start gap-4">
-                <div
-                  className="w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-sm shrink-0"
-                  style={{ backgroundColor: region.color }}
-                >
-                  {region.id.toUpperCase()}
+              <div className="flex flex-col gap-6">
+                {/* Brain Region Diagram */}
+                <div className="flex justify-center">
+                  <div
+                    className="w-64 h-48 rounded-lg overflow-hidden border-2"
+                    style={{ borderColor: region.color }}
+                  >
+                    <img
+                      src={`/images/${region.id}.png`}
+                      alt={`${region.name} diagram`}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        // Fallback to colored placeholder if image fails to load
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        const parent = target.parentElement;
+                        if (parent) {
+                          parent.innerHTML = `
+                            <div class="w-full h-full flex flex-col items-center justify-center text-white font-semibold" style="background: linear-gradient(135deg, ${region.color}80, ${region.color}40)">
+                              <div class="text-2xl mb-2">${region.id.toUpperCase()}</div>
+                              <div class="text-sm opacity-80">Brain Diagram</div>
+                            </div>
+                          `;
+                        }
+                      }}
+                    />
+                  </div>
                 </div>
 
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-lg font-semibold mb-1" style={{ color: "var(--nt-text-hi)" }}>
-                    {region.name}
-                  </h3>
+                {/* Region Information */}
+                <div>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold text-xs shrink-0"
+                      style={{ backgroundColor: region.color }}
+                    >
+                      {region.id.toUpperCase()}
+                    </div>
+                    <h3 className="text-lg font-semibold" style={{ color: "var(--nt-text-hi)" }}>
+                      {region.name}
+                    </h3>
+                  </div>
 
                   <div className="mb-3">
                     <span
@@ -851,11 +881,9 @@ export default function DashboardPage() {
             <div
               className="absolute inset-0 flex flex-col items-center justify-center px-8 transition-all duration-[400ms] ease-out"
               style={{
-                opacity: hasStarted || activePage === "history" || activePage === "brain regions" || activePage === "dashboard" ? 0 : 1,
-                opacity: hasStarted || activePage === "history" || activePage === "brain regions" || activePage === "biomarkers" ? 0 : 1,
+                opacity: hasStarted || activePage === "history" || activePage === "brain regions" || activePage === "biomarkers" || activePage === "dashboard" ? 0 : 1,
                 transform: hasStarted ? "translateY(-24px)" : "translateY(0)",
-                pointerEvents: hasStarted || activePage === "history" || activePage === "brain regions" || activePage === "dashboard" ? "none" : "auto",
-                pointerEvents: hasStarted || activePage === "history" || activePage === "brain regions" || activePage === "biomarkers" ? "none" : "auto",
+                pointerEvents: hasStarted || activePage === "history" || activePage === "brain regions" || activePage === "biomarkers" || activePage === "dashboard" ? "none" : "auto",
               }}
               aria-hidden={hasStarted || activePage === "history" || activePage === "brain regions"}
             >
@@ -892,10 +920,9 @@ export default function DashboardPage() {
             <div
               className="absolute inset-0 flex gap-2.5 transition-all duration-[400ms] ease-out"
               style={{
-                opacity: hasStarted && activePage !== "history" && activePage !== "brain regions" && activePage !== "dashboard" ? 1 : 0,
+                opacity: hasStarted && activePage !== "history" && activePage !== "brain regions" && activePage !== "biomarkers" && activePage !== "dashboard" ? 1 : 0,
                 transform: hasStarted ? "none" : "translateY(24px)",
-                pointerEvents: hasStarted && activePage !== "history" && activePage !== "brain regions" && activePage !== "dashboard" ? "auto" : "none",
-                pointerEvents: hasStarted && activePage !== "history" && activePage !== "brain regions" && activePage !== "biomarkers" ? "auto" : "none",
+                pointerEvents: hasStarted && activePage !== "history" && activePage !== "brain regions" && activePage !== "biomarkers" && activePage !== "dashboard" ? "auto" : "none",
                 padding: "10px",
               }}
               aria-hidden={!hasStarted || activePage === "history" || activePage === "brain regions"}
