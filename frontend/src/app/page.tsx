@@ -93,7 +93,171 @@ type AgentStep = {
   detail?: string;
 };
 
-// ─── Compact agent card — fits in small right-panel cards ─────────────────────
+// ─── Brain Regions Information Panel ──────────────────────────────────────────
+
+function BrainRegionsPanel() {
+  const regions = [
+    {
+      id: "dlpfc",
+      name: "DLPFC (Dorolateral Prefrontal Cortex)",
+      location: "Frontal Lobe",
+      function: "Executive function, working memory, cognitive control, and decision-making",
+      agent: "Syntax Agent",
+      analysis: "Analyzes grammatical structure, sentence complexity, and language organization patterns",
+      color: "#00e5ff",
+    },
+    {
+      id: "broca",
+      name: "Broca's Area",
+      location: "Frontal Lobe",
+      function: "Speech production, language processing, and motor planning for articulation",
+      agent: "Lexical Agent",
+      analysis: "Examines vocabulary richness, word choice patterns, and lexical diversity",
+      color: "#ff6b6b",
+    },
+    {
+      id: "wernicke",
+      name: "Wernicke's Area",
+      location: "Temporal Lobe",
+      function: "Language comprehension, semantic processing, and understanding of spoken/written words",
+      agent: "Semantic Agent",
+      analysis: "Evaluates meaning coherence, idea connectivity, and conceptual relationships",
+      color: "#f59e0b",
+    },
+    {
+      id: "sma",
+      name: "Supplementary Motor Area",
+      location: "Frontal Lobe",
+      function: "Motor planning, speech rhythm, and coordination of complex movements",
+      agent: "Prosody Agent",
+      analysis: "Assesses speech timing, intonation patterns, and prosodic features",
+      color: "#1d9e75",
+    },
+    {
+      id: "amygdala",
+      name: "Amygdala",
+      location: "Temporal Lobe",
+      function: "Emotional processing, fear response, and affective state regulation",
+      agent: "Affective Agent",
+      analysis: "Monitors emotional tone, affective markers, and emotional expression patterns",
+      color: "#a855f7",
+    },
+  ];
+
+  return (
+    <div className="h-full overflow-y-auto p-6">
+      <div className="max-w-4xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-2xl font-semibold mb-2" style={{ color: "var(--nt-text-hi)" }}>
+            Brain Regions & Cognitive Analysis
+          </h1>
+          <p className="text-sm" style={{ color: "var(--nt-text-md)" }}>
+            Explore the neural foundations of language and cognition. Each brain region plays a specialized role
+            in processing different aspects of communication and thought.
+          </p>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-1">
+          {regions.map((region) => (
+            <div
+              key={region.id}
+              className="rounded-xl p-6"
+              style={{
+                background: "var(--nt-glass)",
+                backdropFilter: "blur(18px)",
+                border: "1px solid var(--nt-glass-border)",
+                boxShadow: "var(--nt-glass-shadow)",
+              }}
+            >
+              <div className="flex items-start gap-4">
+                <div
+                  className="w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-sm shrink-0"
+                  style={{ backgroundColor: region.color }}
+                >
+                  {region.id.toUpperCase()}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-lg font-semibold mb-1" style={{ color: "var(--nt-text-hi)" }}>
+                    {region.name}
+                  </h3>
+
+                  <div className="mb-3">
+                    <span
+                      className="inline-block px-2 py-1 rounded-md text-xs font-medium"
+                      style={{
+                        backgroundColor: `${region.color}20`,
+                        color: region.color,
+                        border: `1px solid ${region.color}30`,
+                      }}
+                    >
+                      {region.location}
+                    </span>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <h4 className="text-sm font-medium mb-1" style={{ color: "var(--nt-text-hi)" }}>
+                        Neural Function
+                      </h4>
+                      <p className="text-sm" style={{ color: "var(--nt-text-md)" }}>
+                        {region.function}
+                      </p>
+                    </div>
+
+                    <div>
+                      <h4 className="text-sm font-medium mb-1" style={{ color: "var(--nt-text-hi)" }}>
+                        Cognitive Agent
+                      </h4>
+                      <p className="text-sm" style={{ color: "var(--nt-text-md)" }}>
+                        <span style={{ color: region.color, fontWeight: 500 }}>{region.agent}</span> - {region.analysis}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-8 p-6 rounded-xl" style={{
+          background: "var(--nt-glass)",
+          backdropFilter: "blur(18px)",
+          border: "1px solid var(--nt-glass-border)",
+          boxShadow: "var(--nt-glass-shadow)",
+        }}>
+          <h2 className="text-lg font-semibold mb-3" style={{ color: "var(--nt-text-hi)" }}>
+            How It Works
+          </h2>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <h3 className="text-sm font-medium mb-2" style={{ color: "var(--nt-text-hi)" }}>
+                Neural Analysis Pipeline
+              </h3>
+              <ul className="text-sm space-y-1" style={{ color: "var(--nt-text-md)" }}>
+                <li>• Speech/text input processing</li>
+                <li>• Feature extraction from multiple modalities</li>
+                <li>• Region-specific biomarker calculation</li>
+                <li>• Cognitive signature generation</li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="text-sm font-medium mb-2" style={{ color: "var(--nt-text-hi)" }}>
+                Clinical Applications
+              </h3>
+              <ul className="text-sm space-y-1" style={{ color: "var(--nt-text-md)" }}>
+                <li>• Early detection of cognitive decline</li>
+                <li>• Language disorder assessment</li>
+                <li>• Treatment progress monitoring</li>
+                <li>• Research biomarker validation</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function MiniAgentCard({ agent, isActive }: { agent: AgentCardProps; isActive: boolean }) {
   const score = agent.topScore ?? 0;
@@ -423,15 +587,28 @@ export default function DashboardPage() {
               />
             </div>
 
+            {/* ══════ BRAIN REGIONS VIEW ══════ */}
+            <div
+              className="absolute inset-0 transition-all duration-[350ms] ease-out"
+              style={{
+                opacity: activePage === "brain regions" ? 1 : 0,
+                transform: activePage === "brain regions" ? "none" : "translateY(12px)",
+                pointerEvents: activePage === "brain regions" ? "auto" : "none",
+              }}
+              aria-hidden={activePage !== "brain regions"}
+            >
+              <BrainRegionsPanel />
+            </div>
+
             {/* ══════ PHASE 1 — Pre-submission, centred ══════ */}
             <div
               className="absolute inset-0 flex flex-col items-center justify-center px-8 transition-all duration-[400ms] ease-out"
               style={{
-                opacity: hasStarted || activePage === "history" ? 0 : 1,
+                opacity: hasStarted || activePage === "history" || activePage === "brain regions" ? 0 : 1,
                 transform: hasStarted ? "translateY(-24px)" : "translateY(0)",
-                pointerEvents: hasStarted || activePage === "history" ? "none" : "auto",
+                pointerEvents: hasStarted || activePage === "history" || activePage === "brain regions" ? "none" : "auto",
               }}
-              aria-hidden={hasStarted || activePage === "history"}
+              aria-hidden={hasStarted || activePage === "history" || activePage === "brain regions"}
             >
               <div className="mb-8 flex flex-col items-center gap-2">
                 <span
@@ -459,12 +636,12 @@ export default function DashboardPage() {
             <div
               className="absolute inset-0 flex gap-2.5 transition-all duration-[400ms] ease-out"
               style={{
-                opacity: hasStarted && activePage !== "history" ? 1 : 0,
+                opacity: hasStarted && activePage !== "history" && activePage !== "brain regions" ? 1 : 0,
                 transform: hasStarted ? "none" : "translateY(24px)",
-                pointerEvents: hasStarted && activePage !== "history" ? "auto" : "none",
+                pointerEvents: hasStarted && activePage !== "history" && activePage !== "brain regions" ? "auto" : "none",
                 padding: "10px",
               }}
-              aria-hidden={!hasStarted}
+              aria-hidden={!hasStarted || activePage === "history" || activePage === "brain regions"}
             >
               {/* ── LEFT: Brain hero (60%) ── */}
               <div
