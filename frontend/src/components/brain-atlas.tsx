@@ -186,6 +186,9 @@ export function BrainAtlas({
     [onRegionClick],
   );
 
+  const maxScore = Math.max(...Object.values(activations), 0);
+  const globalIntensity = Math.min(1, maxScore * 1.3);
+
   return (
     <div className={`relative w-full h-full select-none ${className}`} style={style}>
       <svg
@@ -195,6 +198,21 @@ export function BrainAtlas({
       >
         {/* ── Definitions ────────────────────────────── */}
         <defs>
+          <radialGradient id="brain-aurora" cx="50%" cy="45%" r="52%">
+            <stop offset="0%" stopColor="rgba(0,229,255,0.35)" />
+            <stop offset="40%" stopColor="rgba(0,229,255,0.18)" />
+            <stop offset="100%" stopColor="rgba(0,229,255,0)" />
+          </radialGradient>
+
+          <filter id="brain-wide-glow" x="-120%" y="-120%" width="340%" height="340%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="20" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+
           {/* Per-region glow filters */}
           {REGIONS.map((r) => (
             <filter
@@ -258,8 +276,18 @@ export function BrainAtlas({
         {/* ── Background grid ────────────────────────── */}
         <rect width="500" height="400" fill="url(#brain-grid)" />
 
+        {/* ── Global aurora / light spill (based on highest activation) ── */}
+        <circle
+          cx="250"
+          cy="190"
+          r="220"
+          fill="url(#brain-aurora)"
+          opacity={0.16 * (0.25 + globalIntensity * 0.75)}
+          style={{ mixBlendMode: "screen", transition: "opacity 0.5s" }}
+        />
+
         {/* ── Brain outline ──────────────────────────── */}
-        <g className="animate-brain-glow">
+        <g className="animate-brain-glow" filter={globalIntensity > 0.08 ? "url(#brain-wide-glow)" : undefined}>
           {/* Cortex */}
           <path
             d="
@@ -360,9 +388,10 @@ export function BrainAtlas({
           const score = activations[region.id] ?? 0;
           const isHov = hovered === region.id;
           const isAgentLive = activeAgent === region.agent;
-          const fillOp = Math.max(0.025, score * 0.45);
-          const strokeOp = Math.max(0.06, score * 0.55);
-          const sc = isHov ? 1.06 : 1;
+          const fillOp = Math.min(0.94, Math.max(0.08, 0.15 + score * 0.65 + (isAgentLive ? 0.12 : 0)));
+          const strokeOp = Math.min(0.9, Math.max(0.08, 0.18 + score * 0.45));
+          const glowOp = Math.min(0.55, Math.max(0.08, score * 0.18 + (isAgentLive ? 0.15 : 0)));
+          const sc = isHov ? 1.1 : 1;
 
           return (
             <g
@@ -373,21 +402,29 @@ export function BrainAtlas({
               onClick={() => handleClick(region)}
             >
               {/* Outer ambient glow */}
-              {score > 0.08 && (
+              {score > 0.06 && (
                 <ellipse
                   cx={region.cx}
                   cy={region.cy}
-                  rx={region.rx + 18}
-                  ry={region.ry + 12}
+                  rx={region.rx + 22}
+                  ry={region.ry + 16}
                   fill={region.color}
-                  opacity={score * 0.07}
-                  style={{ transition: "opacity 0.6s" }}
+                  opacity={glowOp}
+                  style={{ transition: "opacity 0.6s, transform 0.4s" }}
                 >
                   {isAgentLive && (
                     <animate
                       attributeName="opacity"
-                      values={`${score * 0.05};${score * 0.14};${score * 0.05}`}
-                      dur="2s"
+                      values={`${glowOp * 0.45};${glowOp * 0.88};${glowOp * 0.45}`}
+                      dur="1.8s"
+                      repeatCount="indefinite"
+                    />
+                  )}
+                  {isAgentLive && (
+                    <animate
+                      attributeName="rx"
+                      values={`${region.rx + 22};${region.rx + 30};${region.rx + 22}`}
+                      dur="1.8s"
                       repeatCount="indefinite"
                     />
                   )}
