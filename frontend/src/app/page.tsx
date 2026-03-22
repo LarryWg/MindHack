@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { NeuroTraceSplash } from "@/components/neurotrace-splash";
 import { NeuroSidebar } from "@/components/neuro-sidebar";
 import { SiteHeader } from "@/components/site-header";
-import { MOCK_AGENTS, type AgentCardProps } from "@/components/agent-card";
+import { type AgentCardProps } from "@/components/agent-card";
 import { AnalysisPanel, type AnalysisInput, type WordTimestamp } from "@/components/analysis-panel";
 import { WaveformPanel } from "@/components/waveform-panel";
 import { ReportPanel, type CognitiveReport } from "@/components/report-panel";
@@ -27,6 +27,48 @@ const AGENT_KEY: Record<string, string> = {
   Prosody: "prosody", Syntax: "syntax", Affective: "affective",
 };
 
+const AGENT_DETAILS: Record<string, { primerSet: string; markers: { name: string; value: number; unit?: string }[] }> = {
+  Lexical: {
+    primerSet: "TTR · Density · Filler",
+    markers: [
+      { name: "TTR", value: 68 },
+      { name: "Lexical density", value: 74 },
+      { name: "Filler rate", value: 42 },
+    ],
+  },
+  Semantic: {
+    primerSet: "Coherence · Density · Tang",
+    markers: [
+      { name: "Coherence", value: 58 },
+      { name: "Idea density", value: 61 },
+      { name: "Tangentiality", value: 33 },
+    ],
+  },
+  Prosody: {
+    primerSet: "Rate · Pause · Hesitation",
+    markers: [
+      { name: "Speech rate", value: 44, unit: "wpm" },
+      { name: "Pause freq", value: 51, unit: "/min" },
+      { name: "Hesitation", value: 38 },
+    ],
+  },
+  Syntax: {
+    primerSet: "MLU · Depth · Passive",
+    markers: [
+      { name: "MLU", value: 83 },
+      { name: "Clause depth", value: 79 },
+      { name: "Passive voice", value: 22 },
+    ],
+  },
+  Affective: {
+    primerSet: "Valence · Arousal · Intensity",
+    markers: [
+      { name: "Valence", value: 55 },
+      { name: "Arousal", value: 62 },
+      { name: "Intensity", value: 48 },
+    ],
+  },
+};
 
 function scoreColor(v: number) {
   if (v > 75) return "#D85A30";
@@ -133,13 +175,27 @@ export default function DashboardPage() {
   const [cognitiveReport, setCognitiveReport] = useState<CognitiveReport | undefined>();
   const [currentAgentIndex, setCurrentAgentIndex] = useState(0);
 
+  const agentCards = useMemo(() => {
+    return activations.map((r) => {
+      const details = AGENT_DETAILS[r.agent] ?? AGENT_DETAILS.Lexical;
+      const topScore = Math.round((r.activation || 0) * 100);
+      return {
+        agentName: `${r.agent} Agent`,
+        primerSet: details.primerSet,
+        brainRegion: r.region,
+        markers: details.markers,
+        topScore,
+      };
+    });
+  }, [activations]);
+
   const nextAgent = useCallback(() => {
-    setCurrentAgentIndex((prev) => (prev + 1) % MOCK_AGENTS.length);
-  }, []);
+    setCurrentAgentIndex((prev) => (prev + 1) % agentCards.length);
+  }, [agentCards.length]);
 
   const prevAgent = useCallback(() => {
-    setCurrentAgentIndex((prev) => (prev - 1 + MOCK_AGENTS.length) % MOCK_AGENTS.length);
-  }, []);
+    setCurrentAgentIndex((prev) => (prev - 1 + agentCards.length) % agentCards.length);
+  }, [agentCards.length]);
 
   const activeAgentName = useMemo(() => {
     const running = agentSteps.find((s) => s.status === "running");
@@ -458,7 +514,7 @@ export default function DashboardPage() {
                       className="flex transition-transform duration-300 ease-in-out"
                       style={{ transform: `translateX(-${currentAgentIndex * 100}%)` }}
                     >
-                      {MOCK_AGENTS.map((agent) => (
+                      {agentCards.map((agent) => (
                         <div key={agent.agentName} className="w-full flex-shrink-0">
                           <MiniAgentCard
                             agent={agent}
@@ -481,7 +537,7 @@ export default function DashboardPage() {
                       </button>
                       
                       <div className="flex justify-center gap-1.5 px-2 pointer-events-auto">
-                        {MOCK_AGENTS.map((_, index) => (
+                        {agentCards.map((_, index) => (
                           <button
                             key={index}
                             onClick={() => setCurrentAgentIndex(index)}
