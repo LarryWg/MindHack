@@ -8,13 +8,7 @@ export type WordTimestamp = { word: string; start?: number; end?: number };
 
 export type AnalysisInput =
   | { type: "text"; content: string }
-  | {
-      type: "transcript";
-      content: string;
-      pauseMap?: number[];
-      wordTimestamps?: WordTimestamp[];
-      duration?: number;
-    }
+  | { type: "transcript"; content: string; pauseMap?: number[]; wordTimestamps?: WordTimestamp[]; duration?: number }
   | { type: "file"; file: File };
 
 type AgentStep = {
@@ -30,6 +24,14 @@ type AnalysisPanelProps = {
   placeholder?: string;
 };
 
+const GLASS: React.CSSProperties = {
+  background: "var(--nt-glass)",
+  backdropFilter: "blur(18px)",
+  WebkitBackdropFilter: "blur(18px)",
+  border: "1px solid var(--nt-glass-border)",
+  boxShadow: "var(--nt-glass-shadow)",
+};
+
 export function AnalysisPanel({
   onSubmit,
   isLoading = false,
@@ -41,20 +43,10 @@ export function AnalysisPanel({
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleTranscriptReady = useCallback(
-    ({
-      transcript,
-      pauseMap,
-      wordTimestamps,
-      duration,
-    }: {
-      transcript: string;
-      pauseMap?: number[];
-      wordTimestamps?: WordTimestamp[];
-      duration?: number;
+    ({ transcript, pauseMap, wordTimestamps, duration }: {
+      transcript: string; pauseMap?: number[]; wordTimestamps?: WordTimestamp[]; duration?: number;
     }) => {
-      const words = Array.isArray(wordTimestamps)
-        ? wordTimestamps.map((w) => w.word).join(" ")
-        : transcript;
+      const words = Array.isArray(wordTimestamps) ? wordTimestamps.map((w) => w.word).join(" ") : transcript;
       setTranscriptPreview(words || transcript);
       setText(transcript);
       onSubmit?.({ type: "transcript", content: transcript, pauseMap, wordTimestamps, duration });
@@ -72,10 +64,7 @@ export function AnalysisPanel({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -83,48 +72,47 @@ export function AnalysisPanel({
     if (file) onSubmit?.({ type: "file", file });
   };
 
-  const statusDot = (status: AgentStep["status"]) => {
-    if (status === "running") return "bg-amber-400 animate-pulse";
-    if (status === "done") return "bg-emerald-500";
-    if (status === "error") return "bg-red-500";
-    return "bg-black/20";
+  const statusDot = (s: AgentStep["status"]) => {
+    if (s === "running") return "bg-amber-400 animate-pulse";
+    if (s === "done")    return "bg-emerald-500";
+    if (s === "error")   return "bg-red-500";
+    return "";
   };
 
-  const statusLabel = (status: AgentStep["status"]) => {
-    if (status === "running") return "text-amber-600 font-medium";
-    if (status === "done") return "text-emerald-700";
-    if (status === "error") return "text-red-600";
-    return "text-black/40";
+  const statusLabel = (s: AgentStep["status"]) => {
+    if (s === "running") return "text-amber-500 font-medium";
+    if (s === "done")    return "text-emerald-600";
+    if (s === "error")   return "text-red-500";
+    return "";
   };
 
   return (
     <div className="w-full max-w-[42rem] mx-auto flex flex-col gap-2">
-      {/* Agent steps — solid white, easy to read */}
+      {/* Agent steps */}
       {agentSteps.length > 0 && (
-        <div
-          className="rounded-xl overflow-hidden"
-          style={{
-            background: "rgba(252, 251, 249, 0.70)",
-            backdropFilter: "blur(16px)",
-            WebkitBackdropFilter: "blur(16px)",
-            border: "1px solid rgba(255,255,255,0.65)",
-            boxShadow: "0 2px 12px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.8)",
-          }}
-        >
+        <div className="rounded-xl overflow-hidden" style={GLASS}>
           <div className="px-4 py-2.5 flex flex-col gap-1">
             {agentSteps.map((step, i) => (
               <div key={i} className="flex items-center gap-2.5">
-                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusDot(step.status)}`} />
-                <span className={`text-xs ${statusLabel(step.status)}`}>{step.name}</span>
+                <span
+                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusDot(step.status)}`}
+                  style={step.status === "pending" ? { background: "var(--nt-track)" } : {}}
+                />
+                <span
+                  className={`text-xs ${statusLabel(step.status)}`}
+                  style={step.status === "pending" ? { color: "var(--nt-text-xs)" } : {}}
+                >
+                  {step.name}
+                </span>
                 {step.detail && (
-                  <span className="text-xs text-black/35 ml-auto">{step.detail}</span>
+                  <span className="text-xs ml-auto" style={{ color: "var(--nt-text-ghost)" }}>{step.detail}</span>
                 )}
               </div>
             ))}
             {isLoading && (
-              <div className="flex items-center gap-2.5 mt-0.5 pt-1.5 border-t border-black/5">
-                <span className="w-1.5 h-1.5 rounded-full bg-black/20 animate-pulse shrink-0" />
-                <span className="text-xs text-black/40">Processing…</span>
+              <div className="flex items-center gap-2.5 mt-0.5 pt-1.5" style={{ borderTop: "1px solid var(--nt-divider)" }}>
+                <span className="w-1.5 h-1.5 rounded-full animate-pulse shrink-0" style={{ background: "var(--nt-track)" }} />
+                <span className="text-xs" style={{ color: "var(--nt-text-xs)" }}>Processing…</span>
               </div>
             )}
           </div>
@@ -132,34 +120,18 @@ export function AnalysisPanel({
       )}
 
       {transcriptPreview && (
-        <div
-          className="rounded-xl px-3.5 py-2.5"
-          style={{
-            background: "rgba(252, 251, 249, 0.70)",
-            backdropFilter: "blur(16px)",
-            WebkitBackdropFilter: "blur(16px)",
-            border: "1px solid rgba(255,255,255,0.65)",
-            boxShadow: "0 2px 10px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)",
-          }}
-        >
-          <div className="text-[10px] font-medium uppercase tracking-widest text-black/35 mb-1.5">
+        <div className="rounded-xl px-3.5 py-2.5" style={GLASS}>
+          <div className="text-[10px] font-medium uppercase tracking-widest mb-1.5" style={{ color: "var(--nt-text-xs)", fontFamily: "var(--font-jetbrains-mono)" }}>
             Transcription
           </div>
-          <div className="text-sm text-black/75 break-words leading-relaxed">{transcriptPreview}</div>
+          <div className="text-sm leading-relaxed break-words" style={{ color: "var(--nt-text-lo)" }}>
+            {transcriptPreview}
+          </div>
         </div>
       )}
 
-      {/* Input — solid white */}
-      <div
-        className="rounded-xl overflow-hidden"
-        style={{
-          background: "rgba(252, 251, 249, 0.72)",
-          backdropFilter: "blur(18px)",
-          WebkitBackdropFilter: "blur(18px)",
-          border: "1px solid rgba(255,255,255,0.68)",
-          boxShadow: "0 4px 20px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.85)",
-        }}
-      >
+      {/* Input */}
+      <div className="rounded-xl overflow-hidden" style={GLASS}>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -167,13 +139,16 @@ export function AnalysisPanel({
           placeholder={placeholder}
           rows={2}
           disabled={isLoading}
-          className="w-full px-4 pt-3 pb-1 text-sm text-black/80 placeholder:text-black/30 bg-transparent resize-none outline-none"
+          className="w-full px-4 pt-3 pb-1 text-sm bg-transparent resize-none outline-none"
+          style={{ color: "var(--nt-text-hi)" }}
         />
+        <style>{`textarea { caret-color: var(--nt-text-hi); } textarea::placeholder { color: var(--nt-text-ghost) !important; }`}</style>
+
         <div className="flex items-center gap-2 px-3 pb-2.5 pt-1">
           {/* Model badge */}
           <div
-            className="flex items-center gap-1.5 text-[11px] text-black/45 rounded-lg px-2 py-1"
-            style={{ background: "rgba(0,0,0,0.03)", border: "1px solid rgba(0,0,0,0.06)" }}
+            className="flex items-center gap-1.5 text-[11px] rounded-lg px-2 py-1"
+            style={{ background: "var(--nt-hover)", border: "1px solid var(--nt-divider)", color: "var(--nt-text-xs)" }}
           >
             <div className="w-2 h-2 rounded-full bg-orange-400" />
             <span>Claude</span>
@@ -185,33 +160,25 @@ export function AnalysisPanel({
             onClick={toggle}
             disabled={isTranscribing}
             title={isRecording ? "Stop" : isTranscribing ? "Transcribing…" : "Record"}
-            className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
-              isTranscribing
-                ? "bg-blue-50 text-blue-500 border border-blue-200"
-                : isRecording
-                  ? "bg-red-50 text-red-500 border border-red-200"
-                  : "text-black/35 hover:text-black/60 hover:bg-black/5"
-            }`}
+            className="w-7 h-7 rounded-full flex items-center justify-center transition-colors"
+            style={{
+              color: isTranscribing ? "rgba(99,179,237,0.85)" : isRecording ? "rgba(252,129,129,0.85)" : "var(--nt-icon)",
+              background: isTranscribing ? "rgba(99,179,237,0.08)" : isRecording ? "rgba(252,129,129,0.08)" : undefined,
+              border: isTranscribing ? "1px solid rgba(99,179,237,0.30)" : isRecording ? "1px solid rgba(252,129,129,0.30)" : "none",
+            }}
           >
-            {isTranscribing ? (
-              <div className="w-3 h-3 rounded-full border border-blue-400/50 border-t-blue-500 animate-spin" />
-            ) : isRecording ? (
-              <MicOff size={13} />
-            ) : (
-              <Mic size={13} />
-            )}
+            {isTranscribing
+              ? <div className="w-3 h-3 rounded-full border border-blue-400/40 border-t-blue-400 animate-spin" />
+              : isRecording ? <MicOff size={13} /> : <Mic size={13} />
+            }
           </button>
 
-          {/* Recording status */}
           {(isRecording || isTranscribing) && (
-            <div className="flex items-center gap-2 text-xs text-black/55">
+            <div className="flex items-center gap-2 text-xs" style={{ color: "var(--nt-text-lo)" }}>
               <span className="font-medium">{isRecording ? "Recording" : "Transcribing…"}</span>
               <span className="tabular-nums">{`00:${recordSeconds.toString().padStart(2, "0")}`}</span>
-              <div className="w-14 h-1.5 bg-black/8 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-emerald-500 rounded-full transition-all"
-                  style={{ width: `${Math.round(audioLevel * 100)}%` }}
-                />
+              <div className="w-14 h-1.5 rounded-full overflow-hidden" style={{ background: "var(--nt-track)" }}>
+                <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${Math.round(audioLevel * 100)}%` }} />
               </div>
             </div>
           )}
@@ -220,17 +187,11 @@ export function AnalysisPanel({
           <button
             onClick={() => fileRef.current?.click()}
             title="Upload file"
-            className="w-7 h-7 rounded-full flex items-center justify-center text-black/35 hover:text-black/60 hover:bg-black/5 transition-colors"
+            className="nt-nav-btn w-7 h-7 rounded-full flex items-center justify-center"
           >
             <Upload size={13} />
           </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".txt,.pdf,.wav,.mp3,.m4a"
-            className="hidden"
-            onChange={handleFile}
-          />
+          <input ref={fileRef} type="file" accept=".txt,.pdf,.wav,.mp3,.m4a" className="hidden" onChange={handleFile} />
 
           <div className="flex-1" />
 
@@ -238,16 +199,13 @@ export function AnalysisPanel({
           <button
             onClick={handleSend}
             disabled={!text.trim() || isLoading}
-            className="h-7 px-3 rounded-full flex items-center gap-1.5 text-[11px] font-medium bg-black text-white disabled:opacity-25 hover:bg-black/80 transition-colors"
+            className="h-7 px-3 rounded-full flex items-center gap-1.5 text-[11px] font-medium transition-colors disabled:opacity-25"
+            style={{ background: "var(--nt-btn-bg)", color: "var(--nt-btn-fg)" }}
           >
-            {isLoading ? (
-              <div className="w-3 h-3 rounded-full border border-white/40 border-t-white animate-spin" />
-            ) : (
-              <>
-                <Send size={11} />
-                <span>Analyse</span>
-              </>
-            )}
+            {isLoading
+              ? <div className="w-3 h-3 rounded-full border-2 border-current/40 border-t-current animate-spin" />
+              : <><Send size={11} /><span>Analyse</span></>
+            }
           </button>
         </div>
       </div>

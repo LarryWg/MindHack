@@ -9,8 +9,11 @@ import { type AgentCardProps } from "@/components/agent-card";
 import { AnalysisPanel, type AnalysisInput, type WordTimestamp } from "@/components/analysis-panel";
 import { WaveformPanel } from "@/components/waveform-panel";
 import { ReportPanel, type CognitiveReport } from "@/components/report-panel";
+import { HistoryPanel } from "@/components/history-panel";
 import GlassSurface from "@/components/GlassSurface";
 import type { RegionActivation } from "@/components/brain-viewer";
+import { useAnalysisHistory } from "@/hooks/useAnalysisHistory";
+import { useTheme } from "@/hooks/useTheme";
 
 // ─── Brain region definitions ─────────────────────────────────────────────────
 
@@ -100,20 +103,20 @@ function MiniAgentCard({ agent, isActive }: { agent: AgentCardProps; isActive: b
     <div
       className="rounded-xl p-3 h-full flex flex-col"
       style={{
-        background: "rgba(252, 251, 249, 0.68)",
+        background: "var(--nt-glass)",
         backdropFilter: "blur(16px)",
-        border: isActive ? `1px solid rgba(216,90,48,0.3)` : "1px solid rgba(255,255,255,0.62)",
+        border: isActive ? `1px solid rgba(216,90,48,0.35)` : "1px solid var(--nt-glass-border)",
         boxShadow: isActive
-          ? "0 0 0 2px rgba(216,90,48,0.07), 0 2px 10px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.8)"
-          : "0 2px 10px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)",
+          ? "0 0 0 2px rgba(216,90,48,0.08), var(--nt-glass-shadow)"
+          : "var(--nt-glass-shadow)",
         transition: "border-color 0.3s, box-shadow 0.3s",
       }}
     >
       {/* Name + score */}
       <div className="flex items-start justify-between gap-1 mb-1.5">
         <div>
-          <p className="text-[11px] font-semibold text-black/80 leading-tight">{agent.agentName}</p>
-          <p className="text-[9px] text-black/40 mt-0.5" style={{ fontFamily: "var(--font-jetbrains-mono)" }}>
+          <p className="text-[11px] font-semibold leading-tight" style={{ color: "var(--nt-text-hi)" }}>{agent.agentName}</p>
+          <p className="text-[9px] mt-0.5" style={{ color: "var(--nt-text-xs)", fontFamily: "var(--font-jetbrains-mono)" }}>
             {agent.brainRegion}
           </p>
         </div>
@@ -123,7 +126,7 @@ function MiniAgentCard({ agent, isActive }: { agent: AgentCardProps; isActive: b
       </div>
 
       {/* Overall score bar */}
-      <div className="h-1 rounded-full bg-black/8 overflow-hidden mb-2">
+      <div className="h-1 rounded-full overflow-hidden mb-2" style={{ background: "var(--nt-track)" }}>
         <div
           className="h-full rounded-full transition-all duration-700"
           style={{ width: `${score}%`, background: color }}
@@ -134,7 +137,7 @@ function MiniAgentCard({ agent, isActive }: { agent: AgentCardProps; isActive: b
       <div className="flex flex-col gap-1 flex-1">
         {agent.markers.slice(0, 2).map((m) => (
           <div key={m.name} className="flex items-center justify-between gap-1">
-            <span className="text-[10px] text-black/50 truncate">{m.name}</span>
+            <span className="text-[10px] truncate" style={{ color: "var(--nt-text-lo)" }}>{m.name}</span>
             <span
               className="text-[10px] tabular-nums shrink-0"
               style={{ color: scoreColor(m.value), fontFamily: "var(--font-jetbrains-mono)" }}
@@ -146,11 +149,14 @@ function MiniAgentCard({ agent, isActive }: { agent: AgentCardProps; isActive: b
       </div>
 
       {/* Active indicator */}
-      <div className="flex items-center gap-1.5 pt-2 mt-auto border-t border-black/5">
-        <div className={`w-1.5 h-1.5 rounded-full ${isActive ? "bg-amber-400 animate-pulse" : "bg-black/10"}`} />
+      <div className="flex items-center gap-1.5 pt-2 mt-auto" style={{ borderTop: "1px solid var(--nt-divider)" }}>
+        <div
+          className={`w-1.5 h-1.5 rounded-full ${isActive ? "bg-amber-400 animate-pulse" : ""}`}
+          style={!isActive ? { background: "var(--nt-track)" } : {}}
+        />
         <span
           className="text-[9px] uppercase tracking-widest"
-          style={{ color: "rgba(0,0,0,0.28)", fontFamily: "var(--font-jetbrains-mono)" }}
+          style={{ color: "var(--nt-text-ghost)", fontFamily: "var(--font-jetbrains-mono)" }}
         >
           {isActive ? "Processing" : "Standby"}
         </span>
@@ -162,7 +168,9 @@ function MiniAgentCard({ agent, isActive }: { agent: AgentCardProps; isActive: b
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const { isDark, toggle: toggleTheme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const { entries: historyEntries, addEntry, removeEntry, clearAll } = useAnalysisHistory();
   const [hasStarted, setHasStarted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -277,6 +285,18 @@ export default function DashboardPage() {
               }
               setBiomarkerScores(scores);
               setActivations(BRAIN_REGIONS.map((r) => ({ ...r, activation: scores[AGENT_KEY[r.agent]] ?? r.activation })));
+              // Save to history when we have both scores and report
+              if (ev.report) {
+                addEntry({
+                  inputType: input.type === "transcript" ? "transcript" : "text",
+                  inputSnippet: ("content" in input ? input.content : "").slice(0, 300),
+                  scores,
+                  report: ev.report as CognitiveReport,
+                  sessionId: ev.session_id ?? "",
+                  wordTimestamps: input.type === "transcript" ? input.wordTimestamps : undefined,
+                  audioDuration: input.type === "transcript" ? input.duration : undefined,
+                });
+              }
             }
             setAgentSteps((prev) => prev.map((s) => ({ ...s, status: "done" as const })));
           } else if (ev.type === "error") {
@@ -299,14 +319,26 @@ export default function DashboardPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [sessionId]);
+  }, [sessionId, addEntry]);
+
+  // ── Restore a history entry ──────────────────────────────────────────────────
+  const handleRestore = useCallback((entry: import("@/hooks/useAnalysisHistory").HistoryEntry) => {
+    setHasStarted(true);
+    setBiomarkerScores(entry.scores);
+    setCognitiveReport(entry.report);
+    setWordTimestamps(entry.wordTimestamps);
+    setAudioDuration(entry.audioDuration);
+    setActivations(BRAIN_REGIONS.map((r) => ({ ...r, activation: entry.scores[AGENT_KEY[r.agent]] ?? r.activation })));
+    setAgentSteps([]);
+    setActivePage("analysis");
+  }, []);
 
   // ── Shared glass style ──────────────────────────────────────────────────────
   const glassStyle: React.CSSProperties = {
-    background: "rgba(252, 251, 249, 0.68)",
-    backdropFilter: "blur(16px)",
-    border: "1px solid rgba(255,255,255,0.62)",
-    boxShadow: "0 2px 12px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)",
+    background: "var(--nt-glass)",
+    backdropFilter: "blur(18px)",
+    border: "1px solid var(--nt-glass-border)",
+    boxShadow: "var(--nt-glass-shadow)",
   };
 
   return (
@@ -316,9 +348,10 @@ export default function DashboardPage() {
       {/* Dither background */}
       <div className="fixed inset-0 z-0 h-screen w-screen">
         <Dither
-          waveSpeed={0.02} waveFrequency={3} waveAmplitude={0.3}
-          backgroundColor={[1, 1, 1]} waveColor={[0, 0, 0]}
-          colorNum={4} pixelSize={2} enableMouseInteraction mouseRadius={1.2}
+          waveSpeed={0.025} waveFrequency={3} waveAmplitude={0.35}
+          backgroundColor={isDark ? [0.04, 0.05, 0.09] : [1, 1, 1]}
+          waveColor={isDark ? [0.78, 0.85, 0.98] : [0, 0, 0]}
+          colorNum={5} pixelSize={2} enableMouseInteraction mouseRadius={1.2}
         />
       </div>
 
@@ -336,9 +369,11 @@ export default function DashboardPage() {
             width={240}
             height={"100%" as unknown as number}
             borderRadius={0}
-            opacity={0.7}
+            brightness={isDark ? 6 : 50}
+            opacity={isDark ? 0.85 : 0.7}
             blur={14}
-            className="border-r border-black/5"
+            className="border-r"
+            style={{ borderRight: "1px solid var(--nt-divider)" } as React.CSSProperties}
             contentClassName="!p-0 !items-start !justify-start"
           >
             <NeuroSidebar
@@ -364,28 +399,51 @@ export default function DashboardPage() {
             title="Cognitive Analysis"
             sidebarOpen={sidebarOpen}
             onToggleSidebar={() => setSidebarOpen((o) => !o)}
+            isDark={isDark}
+            onToggleTheme={toggleTheme}
           />
 
           <div className="relative flex-1 min-h-0 overflow-hidden">
+
+            {/* ══════ HISTORY VIEW ══════ */}
+            <div
+              className="absolute inset-0 transition-all duration-[350ms] ease-out"
+              style={{
+                opacity: activePage === "history" ? 1 : 0,
+                transform: activePage === "history" ? "none" : "translateY(12px)",
+                pointerEvents: activePage === "history" ? "auto" : "none",
+              }}
+              aria-hidden={activePage !== "history"}
+            >
+              <HistoryPanel
+                entries={historyEntries}
+                onRestore={handleRestore}
+                onRemove={removeEntry}
+                onClearAll={clearAll}
+              />
+            </div>
 
             {/* ══════ PHASE 1 — Pre-submission, centred ══════ */}
             <div
               className="absolute inset-0 flex flex-col items-center justify-center px-8 transition-all duration-[400ms] ease-out"
               style={{
-                opacity: hasStarted ? 0 : 1,
+                opacity: hasStarted || activePage === "history" ? 0 : 1,
                 transform: hasStarted ? "translateY(-24px)" : "translateY(0)",
-                pointerEvents: hasStarted ? "none" : "auto",
+                pointerEvents: hasStarted || activePage === "history" ? "none" : "auto",
               }}
-              aria-hidden={hasStarted}
+              aria-hidden={hasStarted || activePage === "history"}
             >
               <div className="mb-8 flex flex-col items-center gap-2">
                 <span
-                  className="text-[30px] font-light tracking-[0.14em] text-black/18"
-                  style={{ fontFamily: "var(--font-syne), sans-serif" }}
+                  className="text-[30px] font-light tracking-[0.14em]"
+                  style={{ fontFamily: "var(--font-syne), sans-serif", color: "var(--nt-text-md)" }}
                 >
                   neurotrace
                 </span>
-                <span className="text-[11px] tracking-[0.32em] uppercase text-black/18 font-medium">
+                <span
+                  className="text-[11px] tracking-[0.32em] uppercase font-medium"
+                  style={{ color: "var(--nt-text-xs)" }}
+                >
                   cognitive signature analysis
                 </span>
               </div>
@@ -401,9 +459,9 @@ export default function DashboardPage() {
             <div
               className="absolute inset-0 flex gap-2.5 transition-all duration-[400ms] ease-out"
               style={{
-                opacity: hasStarted ? 1 : 0,
+                opacity: hasStarted && activePage !== "history" ? 1 : 0,
                 transform: hasStarted ? "none" : "translateY(24px)",
-                pointerEvents: hasStarted ? "auto" : "none",
+                pointerEvents: hasStarted && activePage !== "history" ? "auto" : "none",
                 padding: "10px",
               }}
               aria-hidden={!hasStarted}
@@ -417,10 +475,10 @@ export default function DashboardPage() {
                 <div
                   className="absolute top-3 left-3 z-10 px-2 py-0.5 rounded-md text-[9px] font-semibold tracking-widest uppercase pointer-events-none"
                   style={{
-                    background: "rgba(252,251,249,0.72)",
+                    background: "var(--nt-glass)",
                     backdropFilter: "blur(8px)",
-                    color: "rgba(0,0,0,0.38)",
-                    border: "1px solid rgba(255,255,255,0.62)",
+                    color: "var(--nt-text-lo)",
+                    border: "1px solid var(--nt-glass-border)",
                     fontFamily: "var(--font-jetbrains-mono)",
                   }}
                 >
@@ -432,10 +490,10 @@ export default function DashboardPage() {
                   <div
                     className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[9px] font-semibold tracking-widest uppercase"
                     style={{
-                      background: "rgba(252,251,249,0.72)",
+                      background: "var(--nt-glass)",
                       backdropFilter: "blur(8px)",
-                      color: "#C4471A",
-                      border: "1px solid rgba(216,90,48,0.2)",
+                      color: "#f5a46a",
+                      border: "1px solid rgba(216,90,48,0.28)",
                       fontFamily: "var(--font-jetbrains-mono)",
                     }}
                   >
@@ -449,9 +507,9 @@ export default function DashboardPage() {
                   <div
                     className="absolute bottom-3 left-3 z-10 flex flex-col gap-1 p-2 rounded-xl pointer-events-none"
                     style={{
-                      background: "rgba(252,251,249,0.72)",
+                      background: "var(--nt-glass)",
                       backdropFilter: "blur(8px)",
-                      border: "1px solid rgba(255,255,255,0.62)",
+                      border: "1px solid var(--nt-glass-border)",
                     }}
                   >
                     {BRAIN_REGIONS.map((r) => {
@@ -465,12 +523,12 @@ export default function DashboardPage() {
                           />
                           <span
                             className="text-[9px] uppercase tracking-wider"
-                            style={{ color: "rgba(0,0,0,0.45)", fontFamily: "var(--font-jetbrains-mono)", minWidth: 70 }}
+                            style={{ color: "var(--nt-text-lo)", fontFamily: "var(--font-jetbrains-mono)", minWidth: 70 }}
                           >
                             {r.region}
                           </span>
                           <div
-                            className="w-12 h-0.5 rounded-full bg-black/8 overflow-hidden"
+                            className="w-12 h-0.5 rounded-full overflow-hidden" style={{ background: "var(--nt-track)" }}
                           >
                             <div
                               className="h-full rounded-full transition-all duration-700"
@@ -494,7 +552,7 @@ export default function DashboardPage() {
                   <div
                     className="absolute bottom-3 right-3 z-10 text-[9px] pointer-events-none"
                     style={{
-                      color: "rgba(0,0,0,0.22)",
+                      color: "var(--nt-text-ghost)",
                       fontFamily: "var(--font-jetbrains-mono)",
                     }}
                   >
@@ -528,10 +586,11 @@ export default function DashboardPage() {
                     <div className="absolute inset-0 flex items-end justify-between px-2 pb-18 pointer-events-none">
                       <button
                         onClick={prevAgent}
-                        className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-all duration-200 backdrop-blur border border-white/30 shadow-lg pointer-events-auto"
+                        className="w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 backdrop-blur shadow-lg pointer-events-auto"
+                        style={{ background: "var(--nt-glass)", border: "1px solid var(--nt-glass-border)" }}
                         aria-label="Previous agent"
                       >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: 'rgba(0,0,0,0.7)' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: 'var(--nt-text-md)' }}>
                           <path d="M15 18l-6-6 6-6"/>
                         </svg>
                       </button>
@@ -541,11 +600,11 @@ export default function DashboardPage() {
                           <button
                             key={index}
                             onClick={() => setCurrentAgentIndex(index)}
-                            className={`w-2.5 h-2.5 rounded-full transition-all duration-200 backdrop-blur border ${
-                              index === currentAgentIndex 
-                                ? 'bg-white/60 border-white/50 shadow-sm' 
-                                : 'bg-white/20 border-white/30 hover:bg-white/30'
-                            }`}
+                            className="w-2.5 h-2.5 rounded-full transition-all duration-200 backdrop-blur"
+                            style={{
+                              background: index === currentAgentIndex ? "var(--nt-btn-bg)" : "var(--nt-track)",
+                              border: index === currentAgentIndex ? "1px solid var(--nt-glass-border)" : "1px solid var(--nt-divider)",
+                            }}
                             aria-label={`Go to agent ${index + 1}`}
                           />
                         ))}
@@ -553,10 +612,11 @@ export default function DashboardPage() {
                       
                       <button
                         onClick={nextAgent}
-                        className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-all duration-200 backdrop-blur border border-white/30 shadow-lg pointer-events-auto"
+                        className="w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 backdrop-blur shadow-lg pointer-events-auto"
+                        style={{ background: "var(--nt-glass)", border: "1px solid var(--nt-glass-border)" }}
                         aria-label="Next agent"
                       >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: 'rgba(0,0,0,0.7)' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: 'var(--nt-text-md)' }}>
                           <path d="M9 18l6-6-6-6"/>
                         </svg>
                       </button>

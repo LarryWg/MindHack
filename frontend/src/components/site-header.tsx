@@ -1,12 +1,14 @@
 "use client";
 
-import { IconLayoutSidebarLeftCollapse, IconLayoutSidebarLeftExpand } from "@tabler/icons-react";
+import { IconLayoutSidebarLeftCollapse, IconLayoutSidebarLeftExpand, IconSun, IconMoon } from "@tabler/icons-react";
 
 type SiteHeaderProps = {
   title?: string;
   subtitle?: string;
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;
+  isDark?: boolean;
+  onToggleTheme?: () => void;
 };
 
 export function SiteHeader({
@@ -14,22 +16,24 @@ export function SiteHeader({
   subtitle,
   sidebarOpen = true,
   onToggleSidebar,
+  isDark = false,
+  onToggleTheme,
 }: SiteHeaderProps) {
   return (
     <header
       className="flex items-center gap-3 px-4 h-11 shrink-0"
       style={{
-        background: "rgba(252, 251, 249, 0.70)",
-        borderBottom: "1px solid rgba(255,255,255,0.6)",
+        background: "var(--nt-hdr)",
+        borderBottom: "1px solid var(--nt-hdr-border)",
         backdropFilter: "blur(14px)",
         WebkitBackdropFilter: "blur(14px)",
+        transition: "background 0.3s, border-color 0.3s",
       }}
     >
-      {/* Sidebar toggle */}
       {onToggleSidebar && (
         <button
           onClick={onToggleSidebar}
-          className="flex items-center justify-center w-7 h-7 rounded-md text-black/35 hover:text-black/65 hover:bg-black/6 transition-colors shrink-0"
+          className="nt-nav-btn flex items-center justify-center w-7 h-7 rounded-md shrink-0"
           title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
         >
           {sidebarOpen
@@ -41,21 +45,39 @@ export function SiteHeader({
 
       <div
         className="w-3.5 h-3.5 rounded-sm flex items-center justify-center shrink-0"
-        style={{ border: "1.5px solid rgba(0,0,0,0.25)" }}
+        style={{ border: "1.5px solid var(--nt-text-xs)" }}
       >
-        <div className="w-1.5 h-1.5 rounded-[1px] bg-black/30" />
+        <div className="w-1.5 h-1.5 rounded-[1px]" style={{ background: "var(--nt-text-xs)" }} />
       </div>
+
       <span
-        className="text-[13px] font-medium text-black/65 tracking-tight"
-        style={{ fontFamily: "var(--font-dm-sans), sans-serif" }}
+        className="text-[13px] font-medium tracking-tight"
+        style={{ color: "var(--nt-text-md)", fontFamily: "var(--font-dm-sans), sans-serif" }}
       >
         {title}
       </span>
+
       {subtitle && (
         <>
-          <span className="text-black/15 text-sm">/</span>
-          <span className="text-[13px] text-black/40">{subtitle}</span>
+          <span style={{ color: "var(--nt-text-ghost)" }} className="text-sm">/</span>
+          <span className="text-[13px]" style={{ color: "var(--nt-text-xs)" }}>{subtitle}</span>
         </>
+      )}
+
+      <div className="flex-1" />
+
+      {/* Theme toggle */}
+      {onToggleTheme && (
+        <button
+          onClick={onToggleTheme}
+          className="nt-nav-btn flex items-center justify-center w-7 h-7 rounded-md shrink-0"
+          title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          {isDark
+            ? <IconSun size={15} stroke={1.6} />
+            : <IconMoon size={15} stroke={1.6} />
+          }
+        </button>
       )}
     </header>
   );
