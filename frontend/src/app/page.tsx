@@ -513,24 +513,26 @@ export default function DashboardPage() {
                     </div>
                     
                     {/* Navigation controls inside the box */}
-                    <div className="absolute bottom-3 left-0 right-0 flex items-center justify-center gap-2">
+                    <div className="absolute inset-0 flex items-center justify-between px-2 pointer-events-none">
                       <button
                         onClick={prevAgent}
-                        className="w-6 h-6 rounded-full bg-black/20 hover:bg-black/30 flex items-center justify-center transition-colors backdrop-blur"
+                        className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-all duration-200 backdrop-blur border border-white/30 shadow-lg pointer-events-auto"
                         aria-label="Previous agent"
                       >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'rgba(0,0,0,0.6)' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: 'rgba(0,0,0,0.7)' }}>
                           <path d="M15 18l-6-6 6-6"/>
                         </svg>
                       </button>
                       
-                      <div className="flex justify-center gap-1 px-2">
+                      <div className="flex justify-center gap-1.5 px-2 pointer-events-auto">
                         {MOCK_AGENTS.map((_, index) => (
                           <button
                             key={index}
                             onClick={() => setCurrentAgentIndex(index)}
-                            className={`w-2 h-2 rounded-full transition-colors backdrop-blur ${
-                              index === currentAgentIndex ? 'bg-black/50' : 'bg-black/25'
+                            className={`w-2.5 h-2.5 rounded-full transition-all duration-200 backdrop-blur border ${
+                              index === currentAgentIndex 
+                                ? 'bg-white/60 border-white/50 shadow-sm' 
+                                : 'bg-white/20 border-white/30 hover:bg-white/30'
                             }`}
                             aria-label={`Go to agent ${index + 1}`}
                           />
@@ -539,10 +541,10 @@ export default function DashboardPage() {
                       
                       <button
                         onClick={nextAgent}
-                        className="w-6 h-6 rounded-full bg-black/20 hover:bg-black/30 flex items-center justify-center transition-colors backdrop-blur"
+                        className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-all duration-200 backdrop-blur border border-white/30 shadow-lg pointer-events-auto"
                         aria-label="Next agent"
                       >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'rgba(0,0,0,0.6)' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: 'rgba(0,0,0,0.7)' }}>
                           <path d="M9 18l6-6-6-6"/>
                         </svg>
                       </button>
