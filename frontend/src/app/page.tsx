@@ -5,14 +5,14 @@ import dynamic from "next/dynamic";
 import { NeuroTraceSplash } from "@/components/neurotrace-splash";
 import { NeuroSidebar } from "@/components/neuro-sidebar";
 import { SiteHeader } from "@/components/site-header";
-import { AgentCard, MOCK_AGENTS } from "@/components/agent-card";
-import { AnalysisPanel, type AnalysisInput } from "@/components/analysis-panel";
-import { NeuroRadarChart } from "@/components/radar-chart";
+import { MOCK_AGENTS, type AgentCardProps } from "@/components/agent-card";
+import { AnalysisPanel, type AnalysisInput, type WordTimestamp } from "@/components/analysis-panel";
+import { WaveformPanel } from "@/components/waveform-panel";
 import GlassSurface from "@/components/GlassSurface";
 import type { RegionActivation } from "@/components/brain-viewer";
 
-// Brain regions: MNI coords are fixed from neuroimaging literature.
-// Agents only control activation intensity (0–1).
+// ─── Brain region definitions ─────────────────────────────────────────────────
+
 const BRAIN_REGIONS: RegionActivation[] = [
   { region: "Broca's area",    mni: [-44, 20, 8],    activation: 0.72, agent: "Lexical"   },
   { region: "Wernicke's area", mni: [-54, -40, 14],  activation: 0.58, agent: "Semantic"  },
@@ -21,17 +21,24 @@ const BRAIN_REGIONS: RegionActivation[] = [
   { region: "Amygdala",        mni: [-24, -4, -22],  activation: 0.31, agent: "Affective" },
 ];
 
-const AGENT_TO_SCORE_KEY: Record<string, string> = {
-  Lexical: "lexical",
-  Semantic: "semantic",
-  Prosody: "prosody",
-  Syntax: "syntax",
-  Affective: "affective",
+const AGENT_KEY: Record<string, string> = {
+  Lexical: "lexical", Semantic: "semantic",
+  Prosody: "prosody", Syntax: "syntax", Affective: "affective",
 };
 
-// Heavy components — client only, no SSR
+function scoreColor(v: number) {
+  if (v > 75) return "#D85A30";
+  if (v > 50) return "#BA7517";
+  if (v > 25) return "#1D9E75";
+  return "#888780";
+}
+
+// ─── Dynamic imports ──────────────────────────────────────────────────────────
+
 const Dither = dynamic(() => import("@/components/Dither"), { ssr: false });
 const BrainViewer = dynamic(() => import("@/components/brain-viewer"), { ssr: false });
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type AgentStep = {
   name: string;
@@ -39,14 +46,86 @@ type AgentStep = {
   detail?: string;
 };
 
+// ─── Compact agent card — fits in small right-panel cards ─────────────────────
+
+function MiniAgentCard({ agent, isActive }: { agent: AgentCardProps; isActive: boolean }) {
+  const score = agent.topScore ?? 0;
+  const color = scoreColor(score);
+
+  return (
+    <div
+      className="rounded-xl p-3 h-full flex flex-col"
+      style={{
+        background: "rgba(252, 251, 249, 0.68)",
+        backdropFilter: "blur(16px)",
+        border: isActive ? `1px solid rgba(216,90,48,0.3)` : "1px solid rgba(255,255,255,0.62)",
+        boxShadow: isActive
+          ? "0 0 0 2px rgba(216,90,48,0.07), 0 2px 10px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.8)"
+          : "0 2px 10px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)",
+        transition: "border-color 0.3s, box-shadow 0.3s",
+      }}
+    >
+      {/* Name + score */}
+      <div className="flex items-start justify-between gap-1 mb-1.5">
+        <div>
+          <p className="text-[11px] font-semibold text-black/80 leading-tight">{agent.agentName}</p>
+          <p className="text-[9px] text-black/40 mt-0.5" style={{ fontFamily: "var(--font-jetbrains-mono)" }}>
+            {agent.brainRegion}
+          </p>
+        </div>
+        <span className="text-sm font-bold tabular-nums leading-none pt-0.5" style={{ color }}>
+          {score}
+        </span>
+      </div>
+
+      {/* Overall score bar */}
+      <div className="h-1 rounded-full bg-black/8 overflow-hidden mb-2">
+        <div
+          className="h-full rounded-full transition-all duration-700"
+          style={{ width: `${score}%`, background: color }}
+        />
+      </div>
+
+      {/* Compact metrics */}
+      <div className="flex flex-col gap-1 flex-1">
+        {agent.markers.slice(0, 2).map((m) => (
+          <div key={m.name} className="flex items-center justify-between gap-1">
+            <span className="text-[10px] text-black/50 truncate">{m.name}</span>
+            <span
+              className="text-[10px] tabular-nums shrink-0"
+              style={{ color: scoreColor(m.value), fontFamily: "var(--font-jetbrains-mono)" }}
+            >
+              {m.value}{m.unit ? ` ${m.unit}` : ""}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Active indicator */}
+      <div className="flex items-center gap-1.5 pt-2 mt-auto border-t border-black/5">
+        <div className={`w-1.5 h-1.5 rounded-full ${isActive ? "bg-amber-400 animate-pulse" : "bg-black/10"}`} />
+        <span
+          className="text-[9px] uppercase tracking-widest"
+          style={{ color: "rgba(0,0,0,0.28)", fontFamily: "var(--font-jetbrains-mono)" }}
+        >
+          {isActive ? "Processing" : "Standby"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function DashboardPage() {
   const [hasStarted, setHasStarted] = useState(false);
-  const [panelsOpen, setPanelsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
   const [activations, setActivations] = useState<RegionActivation[]>(BRAIN_REGIONS);
   const [biomarkerScores, setBiomarkerScores] = useState<Record<string, number> | undefined>();
+  const [wordTimestamps, setWordTimestamps] = useState<WordTimestamp[] | undefined>();
+  const [audioDuration, setAudioDuration] = useState<number | undefined>();
   const [activePage, setActivePage] = useState("analysis");
   const [useLangFlowTest, setUseLangFlowTest] = useState(false);
   const [langFlowResponse, setLangFlowResponse] = useState<string | null>(null);
@@ -54,169 +133,140 @@ export default function DashboardPage() {
   const activeAgentName = useMemo(() => {
     const running = agentSteps.find((s) => s.status === "running");
     if (!running) return undefined;
-    const map: Record<string, string> = {
-      "Lexical agent": "Lexical",
-      "Semantic agent": "Semantic",
-      "Prosody agent": "Prosody",
-      "Syntax agent": "Syntax",
-    };
-    return map[running.name];
+    return { "Lexical agent": "Lexical", "Semantic agent": "Semantic", "Prosody agent": "Prosody", "Syntax agent": "Syntax" }[running.name];
   }, [agentSteps]);
 
-  // Shift+P toggles side panels
+  // Shift+P toggles side panels (kept for power users)
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.shiftKey && e.key === "P") {
-        e.preventDefault();
-        setPanelsOpen((v) => !v);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    const fn = (e: KeyboardEvent) => { if (e.shiftKey && e.key === "P") e.preventDefault(); };
+    window.addEventListener("keydown", fn);
+    return () => window.removeEventListener("keydown", fn);
   }, []);
 
-  useEffect(() => {
-    if (hasStarted) setPanelsOpen(true);
-  }, [hasStarted]);
+  const handleSubmit = useCallback(async (input: AnalysisInput) => {
+    setHasStarted(true);
+    setIsLoading(true);
+    setBiomarkerScores(undefined);
+    setActivations(BRAIN_REGIONS);
 
-  const handleLangFlowTest = useCallback(
-    async (input: AnalysisInput) => {
-      if (input.type === "file") {
-        console.error("LangFlow test doesn't support file inputs");
+    // Capture word timestamps from voice recording
+    if (input.type === "transcript") {
+      setWordTimestamps(input.wordTimestamps);
+      setAudioDuration(input.duration);
+    } else {
+      setWordTimestamps(undefined);
+      setAudioDuration(undefined);
+    }
+
+    setAgentSteps([
+      { name: "STT preprocessor", status: "running" },
+      { name: "Lexical agent",     status: "pending" },
+      { name: "Semantic agent",    status: "pending" },
+      { name: "Prosody agent",     status: "pending" },
+      { name: "Syntax agent",      status: "pending" },
+      { name: "Biomarker mapper",  status: "pending" },
+      { name: "Report composer",   status: "pending" },
+    ]);
+
+    try {
+      const body =
+        input.type === "text"
+          ? { input_value: input.content, ...(sessionId ? { session_id: sessionId } : {}) }
+          : input.type === "transcript"
+            ? { transcript: input.content, pause_map: input.pauseMap, ...(sessionId ? { session_id: sessionId } : {}) }
+            : null;
+
+      if (!body) { setIsLoading(false); return; }
+
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.body) { setIsLoading(false); return; }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      const processLine = (line: string) => {
+        const t = line.trim();
+        if (!t) return;
+        try {
+          const ev = JSON.parse(t);
+          if (ev.type === "step" && ev.step) {
+            setAgentSteps((prev) => prev.map((s) => s.name === ev.step.name ? { ...s, status: ev.step.status, detail: ev.step.detail } : s));
+          } else if (ev.type === "end") {
+            if (ev.session_id) setSessionId(ev.session_id);
+            if (ev.scores) {
+              const scores = ev.scores as Record<string, number>;
+              setBiomarkerScores(scores);
+              setActivations(BRAIN_REGIONS.map((r) => ({ ...r, activation: scores[AGENT_KEY[r.agent]] ?? r.activation })));
+            }
+            setAgentSteps((prev) => prev.map((s) => ({ ...s, status: "done" as const })));
+          } else if (ev.type === "error") {
+            setAgentSteps((prev) => prev.map((s) => s.status === "running" ? { ...s, status: "error" as const } : s));
+          }
+        } catch { /* skip */ }
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) processLine(line);
+      }
+      if (buffer.trim()) processLine(buffer);
+    } catch (err) {
+      console.error("Analysis error:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [sessionId]);
+
+  const handleLangFlowTest = useCallback(async (input: AnalysisInput) => {
+    if (input.type === "file") {
+      console.error("LangFlow test doesn't support file inputs");
+      return;
+    }
+
+    setHasStarted(true);
+    setIsLoading(true);
+    setLangFlowResponse(null);
+
+    try {
+      const body = { input_value: input.content };
+      const res = await fetch("http://localhost:8000/langflow-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error("LangFlow test failed:", errorText);
+        setLangFlowResponse(`Error: ${errorText}`);
         return;
       }
+      const data = await res.json();
+      console.log("LangFlow response:", data);
+      setLangFlowResponse(JSON.stringify(data, null, 2));
+    } catch (error) {
+      console.error("LangFlow test error:", error);
+      setLangFlowResponse(`Error: ${error}`);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-      setHasStarted(true);
-      setIsLoading(true);
-      setLangFlowResponse(null);
-
-      try {
-        const body = { input_value: input.content };
-
-        const res = await fetch("http://localhost:8000/langflow-test", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-
-        if (!res.ok) {
-          const errorText = await res.text();
-          console.error("LangFlow test failed:", errorText);
-          setLangFlowResponse(`Error: ${errorText}`);
-          return;
-        }
-
-        const data = await res.json();
-        console.log("LangFlow response:", data);
-        setLangFlowResponse(JSON.stringify(data, null, 2));
-
-      } catch (error) {
-        console.error("LangFlow test error:", error);
-        setLangFlowResponse(`Error: ${error}`);
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    []
-  );
-
-  const handleSubmit = useCallback(
-    async (input: AnalysisInput) => {
-      setHasStarted(true);
-      setIsLoading(true);
-      setBiomarkerScores(undefined);
-      setActivations(BRAIN_REGIONS); // reset to defaults while loading
-      setAgentSteps([
-        { name: "STT preprocessor", status: "running" },
-        { name: "Lexical agent", status: "pending" },
-        { name: "Semantic agent", status: "pending" },
-        { name: "Prosody agent", status: "pending" },
-        { name: "Syntax agent", status: "pending" },
-        { name: "Biomarker mapper", status: "pending" },
-        { name: "Report composer", status: "pending" },
-      ]);
-
-      try {
-        const body =
-          input.type === "text"
-            ? { input_value: input.content, ...(sessionId ? { session_id: sessionId } : {}) }
-            : input.type === "transcript"
-              ? {
-                  transcript: input.content,
-                  pause_map: input.pauseMap,
-                  ...(sessionId ? { session_id: sessionId } : {}),
-                }
-              : null;
-
-        if (!body) { setIsLoading(false); return; }
-
-        const res = await fetch("/api/analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-
-        if (!res.body) { setIsLoading(false); return; }
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        const processLine = (line: string) => {
-          const trimmed = line.trim();
-          if (!trimmed) return;
-          try {
-            const event = JSON.parse(trimmed);
-            if (event.type === "step" && event.step) {
-              setAgentSteps((prev) =>
-                prev.map((s) =>
-                  s.name === event.step.name
-                    ? { ...s, status: event.step.status, detail: event.step.detail }
-                    : s,
-                ),
-              );
-            } else if (event.type === "end") {
-              if (event.session_id) setSessionId(event.session_id);
-              if (event.scores) {
-                const scores = event.scores as Record<string, number>;
-                setBiomarkerScores(scores);
-                setActivations(
-                  BRAIN_REGIONS.map((r) => ({
-                    ...r,
-                    activation: scores[AGENT_TO_SCORE_KEY[r.agent]] ?? r.activation,
-                  })),
-                );
-              }
-              setAgentSteps((prev) => prev.map((s) => ({ ...s, status: "done" as const })));
-            } else if (event.type === "error") {
-              setAgentSteps((prev) =>
-                prev.map((s) =>
-                  s.status === "running" ? { ...s, status: "error" as const } : s,
-                ),
-              );
-            }
-          } catch {
-            // skip unparseable lines
-          }
-        };
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-          for (const line of lines) processLine(line);
-        }
-        if (buffer.trim()) processLine(buffer);
-      } catch (err) {
-        console.error("Analysis error:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [sessionId],
-  );
+  // ── Shared glass style ──────────────────────────────────────────────────────
+  const glassStyle: React.CSSProperties = {
+    background: "rgba(252, 251, 249, 0.68)",
+    backdropFilter: "blur(16px)",
+    border: "1px solid rgba(255,255,255,0.62)",
+    boxShadow: "0 2px 12px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.8)",
+  };
 
   return (
     <div className="relative h-screen w-full overflow-hidden">
@@ -225,21 +275,15 @@ export default function DashboardPage() {
       {/* Dither background */}
       <div className="fixed inset-0 z-0 h-screen w-screen">
         <Dither
-          waveSpeed={0.02}
-          waveFrequency={3}
-          waveAmplitude={0.3}
-          backgroundColor={[1, 1, 1]}
-          waveColor={[0, 0, 0]}
-          colorNum={4}
-          pixelSize={2}
-          enableMouseInteraction
-          mouseRadius={1.2}
+          waveSpeed={0.02} waveFrequency={3} waveAmplitude={0.3}
+          backgroundColor={[1, 1, 1]} waveColor={[0, 0, 0]}
+          colorNum={4} pixelSize={2} enableMouseInteraction mouseRadius={1.2}
         />
       </div>
 
       {/* App shell */}
       <div className="relative z-10 flex h-screen w-full">
-        {/* Sidebar */}
+        {/* Sidebar — glass only here */}
         <GlassSurface
           width={240}
           height={"100%" as unknown as number}
@@ -255,37 +299,39 @@ export default function DashboardPage() {
             onNewAnalysis={() => {
               setActivePage("analysis");
               setHasStarted(false);
-              setPanelsOpen(false);
               setAgentSteps([]);
               setBiomarkerScores(undefined);
               setActivations(BRAIN_REGIONS);
+              setWordTimestamps(undefined);
+              setAudioDuration(undefined);
             }}
           />
         </GlassSurface>
 
-        {/* Main area */}
+        {/* Main content */}
         <div className="flex flex-col flex-1 min-w-0">
           <SiteHeader title="Cognitive Analysis" />
 
           <div className="relative flex-1 min-h-0 overflow-hidden">
-            {/* ═══ PHASE 1: Pre-submission ═══ */}
+
+            {/* ══════ PHASE 1 — Pre-submission, centred ══════ */}
             <div
-              className="absolute inset-0 flex flex-col items-center justify-center px-6 transition-all duration-[400ms] ease-out"
+              className="absolute inset-0 flex flex-col items-center justify-center px-8 transition-all duration-[400ms] ease-out"
               style={{
                 opacity: hasStarted ? 0 : 1,
-                transform: hasStarted ? "translateY(-20px)" : "translateY(0)",
+                transform: hasStarted ? "translateY(-24px)" : "translateY(0)",
                 pointerEvents: hasStarted ? "none" : "auto",
               }}
               aria-hidden={hasStarted}
             >
-              <div className="mb-8 flex flex-col items-center gap-2" aria-hidden="true">
+              <div className="mb-8 flex flex-col items-center gap-2">
                 <span
-                  className="text-[28px] font-light tracking-[0.12em] text-black/15"
+                  className="text-[30px] font-light tracking-[0.14em] text-black/18"
                   style={{ fontFamily: "var(--font-syne), sans-serif" }}
                 >
                   neurotrace
                 </span>
-                <span className="text-[11px] tracking-[0.3em] uppercase text-black/15 font-medium">
+                <span className="text-[11px] tracking-[0.32em] uppercase text-black/18 font-medium">
                   cognitive signature analysis
                 </span>
               </div>
@@ -300,93 +346,134 @@ export default function DashboardPage() {
               />
             </div>
 
-            {/* ═══ PHASE 2: Post-submission ═══ */}
+            {/* ══════ PHASE 2 — Post-submission, hero brain layout ══════ */}
             <div
-              className="absolute inset-0 grid transition-all duration-[400ms] ease-out"
+              className="absolute inset-0 flex gap-2.5 transition-all duration-[400ms] ease-out"
               style={{
                 opacity: hasStarted ? 1 : 0,
-                transform: hasStarted ? "translateY(0)" : "translateY(20px)",
+                transform: hasStarted ? "none" : "translateY(24px)",
                 pointerEvents: hasStarted ? "auto" : "none",
-                gridTemplateColumns: "1fr 2.4fr 1fr",
-                gridTemplateRows: "1fr",
-                gap: "12px",
-                padding: "12px",
+                padding: "10px",
               }}
               aria-hidden={!hasStarted}
             >
-              {/* Left column — Lexical + Semantic agents */}
+              {/* ── LEFT: Brain hero (60%) ── */}
               <div
-                className="flex-col gap-3 min-h-0 hidden min-[1200px]:flex"
-                style={{
-                  opacity: panelsOpen ? 1 : 0,
-                  transition: "opacity 300ms ease-out",
-                }}
+                className="rounded-2xl overflow-hidden relative flex-shrink-0"
+                style={{ flex: "3 0 0%", ...glassStyle }}
               >
-                {[MOCK_AGENTS[0], MOCK_AGENTS[1]].map((agent, i) => (
-                  <div key={agent.agentName} className="flex-1 min-h-0">
-                    <GlassSurface
-                      width={"100%" as unknown as number}
-                      height={"100%" as unknown as number}
-                      borderRadius={16}
-                      className="overflow-hidden h-full"
-                      contentClassName="!p-0 !m-0 !items-start !justify-start"
-                    >
-                      <AgentCard
-                        {...agent}
-                        isActive={isLoading && activeAgentName === agent.agentName.replace(" Agent", "")}
-                        isLoading={isLoading && i === 0 && !biomarkerScores}
-                      />
-                    </GlassSurface>
-                  </div>
-                ))}
-              </div>
-
-              {/* Center column — Brain + Radar + Input */}
-              <div className="flex flex-col gap-3 min-h-0 col-span-full min-[1200px]:col-span-1">
-                {/* 3D Brain viewer (NiiVue) */}
-                <div className="flex-1 min-h-0 rounded-[20px] overflow-hidden bg-black/[0.03] border border-black/[0.04]">
-                  <BrainViewer
-                    activations={activations}
-                    activeAgentName={activeAgentName}
-                  />
+                {/* MNI badge */}
+                <div
+                  className="absolute top-3 left-3 z-10 px-2 py-0.5 rounded-md text-[9px] font-semibold tracking-widest uppercase pointer-events-none"
+                  style={{
+                    background: "rgba(252,251,249,0.72)",
+                    backdropFilter: "blur(8px)",
+                    color: "rgba(0,0,0,0.38)",
+                    border: "1px solid rgba(255,255,255,0.62)",
+                    fontFamily: "var(--font-jetbrains-mono)",
+                  }}
+                >
+                  MNI152 · 3D Atlas
                 </div>
 
-                {/* Radar chart or LangFlow response */}
-                <GlassSurface
-                  width={"100%" as unknown as number}
-                  height={180}
-                  borderRadius={16}
-                  opacity={0.55}
-                  blur={12}
-                  className="overflow-hidden shrink-0"
-                  contentClassName="!p-0"
-                >
-                  {useLangFlowTest ? (
-                    <div className="p-3 h-full flex flex-col">
-                      <span className="text-[10px] uppercase tracking-widest text-black/30 font-medium mb-1">
-                        LangFlow Response
-                      </span>
-                      <div className="flex-1 flex items-center justify-center">
-                        {langFlowResponse ? (
-                          <pre className="text-xs bg-black/10 p-2 rounded overflow-auto w-full h-full whitespace-pre-wrap">
-                            {langFlowResponse}
-                          </pre>
-                        ) : (
-                          <span className="text-sm text-zinc-400">
-                            Submit text or audio to see LangFlow response
+                {/* Active agent badge */}
+                {activeAgentName && (
+                  <div
+                    className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[9px] font-semibold tracking-widest uppercase"
+                    style={{
+                      background: "rgba(252,251,249,0.72)",
+                      backdropFilter: "blur(8px)",
+                      color: "#C4471A",
+                      border: "1px solid rgba(216,90,48,0.2)",
+                      fontFamily: "var(--font-jetbrains-mono)",
+                    }}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                    {activeAgentName}
+                  </div>
+                )}
+
+                {/* Activation legend — bottom left */}
+                {biomarkerScores && (
+                  <div
+                    className="absolute bottom-3 left-3 z-10 flex flex-col gap-1 p-2 rounded-xl pointer-events-none"
+                    style={{
+                      background: "rgba(252,251,249,0.72)",
+                      backdropFilter: "blur(8px)",
+                      border: "1px solid rgba(255,255,255,0.62)",
+                    }}
+                  >
+                    {BRAIN_REGIONS.map((r) => {
+                      const score = biomarkerScores[AGENT_KEY[r.agent]] ?? 0;
+                      const color = scoreColor(score * 100);
+                      return (
+                        <div key={r.region} className="flex items-center gap-2">
+                          <div
+                            className="w-2 h-2 rounded-full shrink-0"
+                            style={{ background: color, opacity: 0.4 + score * 0.6 }}
+                          />
+                          <span
+                            className="text-[9px] uppercase tracking-wider"
+                            style={{ color: "rgba(0,0,0,0.45)", fontFamily: "var(--font-jetbrains-mono)", minWidth: 70 }}
+                          >
+                            {r.region}
                           </span>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="p-3 h-full flex flex-col">
-                      <span className="text-[10px] uppercase tracking-widest text-black/30 font-medium mb-1">
-                        Cognitive Domains
-                      </span>
-                      <NeuroRadarChart scores={biomarkerScores} isLoading={isLoading} />
-                    </div>
-                  )}
-                </GlassSurface>
+                          <div
+                            className="w-12 h-0.5 rounded-full bg-black/8 overflow-hidden"
+                          >
+                            <div
+                              className="h-full rounded-full transition-all duration-700"
+                              style={{ width: `${score * 100}%`, background: color }}
+                            />
+                          </div>
+                          <span
+                            className="text-[9px] tabular-nums w-6 text-right"
+                            style={{ color, fontFamily: "var(--font-jetbrains-mono)" }}
+                          >
+                            {Math.round(score * 100)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Instruction hint */}
+                {!biomarkerScores && !isLoading && (
+                  <div
+                    className="absolute bottom-3 right-3 z-10 text-[9px] pointer-events-none"
+                    style={{
+                      color: "rgba(0,0,0,0.22)",
+                      fontFamily: "var(--font-jetbrains-mono)",
+                    }}
+                  >
+                    Drag to rotate · Scroll to zoom
+                  </div>
+                )}
+
+                <BrainViewer activations={activations} activeAgentName={activeAgentName} />
+              </div>
+
+              {/* ── RIGHT: Agents + waveform + input (40%) ── */}
+              <div className="flex flex-col gap-2.5 min-w-0" style={{ flex: "2 0 0%" }}>
+                {/* Agent cards 2×2 grid */}
+                <div className="grid grid-cols-2 gap-2 shrink-0" style={{ gridTemplateRows: "auto auto" }}>
+                  {MOCK_AGENTS.map((agent) => (
+                    <MiniAgentCard
+                      key={agent.agentName}
+                      agent={agent}
+                      isActive={isLoading && activeAgentName === agent.agentName.replace(" Agent", "")}
+                    />
+                  ))}
+                </div>
+
+                {/* Waveform + transcript (only when voice analysed) */}
+                {wordTimestamps && wordTimestamps.length > 0 && (
+                  <WaveformPanel wordTimestamps={wordTimestamps} duration={audioDuration} />
+                )}
+
+                {/* Spacer when no waveform */}
+                {(!wordTimestamps || wordTimestamps.length === 0) && <div className="flex-1" />}
 
                 {/* Analysis input */}
                 <div className="shrink-0">
@@ -397,36 +484,9 @@ export default function DashboardPage() {
                     onToggleLangFlowTest={() => setUseLangFlowTest(!useLangFlowTest)}
                     isLoading={isLoading}
                     agentSteps={agentSteps}
-                    placeholder="Ask about cognitive signature analysis…"
+                    placeholder="Ask about this cognitive signature…"
                   />
                 </div>
-              </div>
-
-              {/* Right column — Prosody + Syntax agents */}
-              <div
-                className="flex-col gap-3 min-h-0 hidden min-[1200px]:flex"
-                style={{
-                  opacity: panelsOpen ? 1 : 0,
-                  transition: "opacity 300ms ease-out",
-                }}
-              >
-                {[MOCK_AGENTS[2], MOCK_AGENTS[3]].map((agent, i) => (
-                  <div key={agent.agentName} className="flex-1 min-h-0">
-                    <GlassSurface
-                      width={"100%" as unknown as number}
-                      height={"100%" as unknown as number}
-                      borderRadius={16}
-                      className="overflow-hidden h-full"
-                      contentClassName="!p-0 !m-0 !items-start !justify-start"
-                    >
-                      <AgentCard
-                        {...agent}
-                        isActive={isLoading && activeAgentName === agent.agentName.replace(" Agent", "")}
-                        isLoading={isLoading && i === 1 && !biomarkerScores}
-                      />
-                    </GlassSurface>
-                  </div>
-                ))}
               </div>
             </div>
           </div>

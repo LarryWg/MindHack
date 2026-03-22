@@ -78,13 +78,13 @@ export function AgentCard({
   if (isLoading) {
     return (
       <div className="p-4 h-full flex flex-col gap-3">
-        <div className="h-3 w-2/3 rounded bg-black/10 animate-pulse" />
-        <div className="h-2 w-1/2 rounded bg-black/8 animate-pulse" />
-        <div className="h-1 w-full rounded-full bg-black/8 animate-pulse mt-2" />
+        <div className="h-3.5 w-2/3 rounded-md bg-black/8 animate-pulse" />
+        <div className="h-2.5 w-1/2 rounded bg-black/5 animate-pulse" />
+        <div className="h-1.5 w-full rounded-full bg-black/5 animate-pulse mt-1" />
         {[0, 1, 2].map((i) => (
           <div key={i} className="flex items-center justify-between gap-2">
-            <div className="h-2 w-24 rounded bg-black/8 animate-pulse" />
-            <div className="h-2 w-8 rounded bg-black/8 animate-pulse" />
+            <div className="h-2.5 w-24 rounded bg-black/5 animate-pulse" />
+            <div className="h-2.5 w-8 rounded bg-black/5 animate-pulse" />
           </div>
         ))}
       </div>
@@ -97,42 +97,49 @@ export function AgentCard({
     <div className="p-4 h-full flex flex-col gap-3">
       {/* Header */}
       <div>
-        <p className="text-xs font-semibold text-black/70">{agentName}</p>
-        <p className="text-[10px] text-black/40 mt-0.5">
-          {brainRegion} · {primerSet}
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-black/85">{agentName}</p>
+          <span
+            className="text-xs font-bold tabular-nums"
+            style={{ color }}
+          >
+            {topScore}
+          </span>
+        </div>
+        <p className="text-xs text-black/45 mt-0.5">
+          {brainRegion}
+          <span className="mx-1.5 text-black/20">·</span>
+          <span style={{ fontFamily: "var(--font-jetbrains-mono), monospace", fontSize: "10px" }}>
+            {primerSet}
+          </span>
         </p>
       </div>
 
       {/* Top score bar */}
-      <div className="flex items-center gap-2">
-        <div className="flex-1 h-1 bg-black/10 rounded-full overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all duration-700"
-            style={{ width: `${topScore}%`, background: color }}
-          />
-        </div>
-        <span
-          className="text-[10px] font-medium tabular-nums w-5 text-right"
-          style={{ color }}
-        >
-          {topScore}
-        </span>
+      <div className="h-1.5 bg-black/8 rounded-full overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all duration-700"
+          style={{ width: `${topScore}%`, background: color }}
+        />
       </div>
 
       {/* Markers */}
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-2">
         {markers.map((m) => (
           <div key={m.name} className="flex items-center justify-between gap-2">
-            <span className="text-[11px] text-black/50 truncate">{m.name}</span>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <div className="w-10 h-0.5 bg-black/10 rounded-full overflow-hidden">
+            <span className="text-xs text-black/60 truncate">{m.name}</span>
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="w-12 h-1 bg-black/8 rounded-full overflow-hidden">
                 <div
                   className="h-full rounded-full"
                   style={{ width: `${m.value}%`, background: scoreColor(m.value) }}
                 />
               </div>
-              <span className="text-[10px] tabular-nums text-black/40 w-8 text-right">
-                {m.value}{m.unit ? ` ${m.unit}` : ""}
+              <span
+                className="text-xs tabular-nums text-black/55 w-10 text-right"
+                style={{ fontFamily: "var(--font-jetbrains-mono), monospace" }}
+              >
+                {m.value}{m.unit ? <>&thinsp;{m.unit}</> : ""}
               </span>
             </div>
           </div>
@@ -142,19 +149,16 @@ export function AgentCard({
       <div className="flex-1" />
 
       {/* Footer */}
-      <div className="flex items-center justify-between pt-2 border-t border-black/5">
-        <span className="text-[10px] text-black/30">Agent Activity</span>
-        <div className="flex items-center gap-1">
-          <div
-            className={`w-1.5 h-1.5 rounded-full ${
-              isActive ? "bg-amber-400 animate-pulse" : "bg-black/15"
-            }`}
-          />
-          <div
-            className={`w-1.5 h-1.5 rounded-full ${
-              isActive ? "bg-emerald-400" : "bg-black/10"
-            }`}
-          />
+      <div className="flex items-center justify-between pt-2.5 border-t border-black/6">
+        <span
+          className="text-[10px] uppercase tracking-widest"
+          style={{ color: "rgba(0,0,0,0.3)", fontFamily: "var(--font-jetbrains-mono), monospace" }}
+        >
+          {isActive ? "Processing" : "Standby"}
+        </span>
+        <div className="flex items-center gap-1.5">
+          <div className={`w-2 h-2 rounded-full ${isActive ? "bg-amber-400 animate-pulse" : "bg-black/12"}`} />
+          <div className={`w-2 h-2 rounded-full ${isActive ? "bg-emerald-500" : "bg-black/8"}`} />
         </div>
       </div>
     </div>

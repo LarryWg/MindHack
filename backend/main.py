@@ -1,3 +1,4 @@
+import asyncio
 import os
 import json
 import httpx
@@ -9,22 +10,75 @@ from pydantic import BaseModel
 from typing import Optional
 from dotenv import load_dotenv
 
-# Load environment variables from .env file in parent directory
-load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
+# Load environment variables from .env file in same directory
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 
 app = FastAPI(title="NeuroTrace Backend")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
-    allow_methods=["POST"],
+    allow_methods=["POST", "GET"],
     allow_headers=["Content-Type"],
 )
 
 LANGFLOW_API_URL = os.getenv("LANGFLOW_API_URL", "http://localhost:7860")
-LANGFLOW_FLOW_ID = os.getenv("LANGFLOW_FLOW_ID", "")
+_FLOW_ID_RAW = os.getenv("LANGFLOW_FLOW_ID", "")
 LANGFLOW_API_KEY = os.getenv("LANGFLOW_API_KEY", "")
 
+# Normalise: strip any leading path so LANGFLOW_FLOW_ID can be either
+# "284e7b53-..." or "/api/v1/run/284e7b53-..."
+LANGFLOW_FLOW_ID = _FLOW_ID_RAW.split("/")[-1] if _FLOW_ID_RAW else ""
+
+
+def _langflow_url() -> str:
+    return f"{LANGFLOW_API_URL}/api/v1/run/{LANGFLOW_FLOW_ID}"
+
+
+def _langflow_headers() -> dict:
+    h = {"Content-Type": "application/json"}
+    if LANGFLOW_API_KEY:
+        h["x-api-key"] = LANGFLOW_API_KEY
+    return h
+
+
+def _extract_text_and_scores(data: dict) -> tuple[str, Optional[dict]]:
+    """Pull message text and optional BiomarkerScores out of a Langflow response."""
+    message_text = ""
+    scores = None
+    try:
+        outputs = data.get("outputs", [])
+        if outputs:
+            inner = outputs[0].get("outputs", [])
+            if inner:
+                results = inner[0].get("results", {})
+                msg = results.get("message", {})
+                if isinstance(msg, dict):
+                    message_text = msg.get("text", "")
+                else:
+                    message_text = str(msg)
+
+                # Scores may be embedded as JSON in the message text
+                if not scores and message_text:
+                    try:
+                        parsed = json.loads(message_text)
+                        if isinstance(parsed, dict) and any(
+                            k in parsed for k in ("lexical", "semantic", "prosody", "syntax", "affective")
+                        ):
+                            scores = parsed
+                    except (json.JSONDecodeError, ValueError):
+                        pass
+
+                # Or returned in artifacts
+                artifacts = inner[0].get("artifacts", {})
+                if not scores and "scores" in artifacts:
+                    scores = artifacts["scores"]
+    except Exception:
+        pass
+    return message_text, scores
+
+
+# ── Request models ────────────────────────────────────────────────────────────
 
 class AnalyzeRequest(BaseModel):
     input_value: Optional[str] = None
@@ -33,69 +87,135 @@ class AnalyzeRequest(BaseModel):
     session_id: Optional[str] = None
 
 
+class LangFlowRequest(BaseModel):
+    input_value: str
+    session_id: Optional[str] = None
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
+AGENT_STEPS = [
+    "STT preprocessor",
+    "Lexical agent",
+    "Semantic agent",
+    "Prosody agent",
+    "Syntax agent",
+    "Biomarker mapper",
+    "Report composer",
+]
+
+
 @app.post("/analyze")
 async def analyze(req: AnalyzeRequest):
     message = req.input_value or req.transcript or ""
     if not message:
         raise HTTPException(status_code=400, detail="No input provided")
 
-    langflow_body: dict = {
+    if not LANGFLOW_FLOW_ID:
+        raise HTTPException(status_code=500, detail="LANGFLOW_FLOW_ID not configured")
+
+    payload: dict = {
         "input_value": message,
         "output_type": "chat",
         "input_type": "chat",
-        "tweaks": {**({"pause_map": req.pause_map} if req.pause_map else {})},
+        "stream": False,
     }
     if req.session_id:
-        langflow_body["session_id"] = req.session_id
+        payload["session_id"] = req.session_id
+    if req.pause_map:
+        payload["tweaks"] = {"pause_map": req.pause_map}
 
-    headers = {"Content-Type": "application/json"}
-    if LANGFLOW_API_KEY:
-        headers["Authorization"] = f"Bearer {LANGFLOW_API_KEY}"
+    async def generate():
+        # ── 1. Emit initial step status ───────────────────────────────────────
+        for i, step in enumerate(AGENT_STEPS):
+            status = "running" if i == 0 else "pending"
+            yield json.dumps({"type": "step", "step": {"name": step, "status": status}}).encode() + b"\n"
 
-    url = f"{LANGFLOW_API_URL}/api/v1/run/{LANGFLOW_FLOW_ID}?stream=true"
+        # ── 2. Fire the Langflow call in a background task ────────────────────
+        loop = asyncio.get_event_loop()
+        langflow_task = loop.create_task(
+            _call_langflow_async(payload)
+        )
 
-    async def stream_langflow() -> bytes:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            async with client.stream("POST", url, json=langflow_body, headers=headers) as resp:
-                if resp.status_code >= 400:
-                    body = await resp.aread()
-                    yield json.dumps({"type": "error", "detail": body.decode()}).encode() + b"\n"
-                    return
-                async for chunk in resp.aiter_bytes():
-                    yield chunk
+        # ── 3. Simulate per-agent progress while waiting ──────────────────────
+        step_delay = 1.8  # seconds between fake step transitions
+        for i in range(1, len(AGENT_STEPS)):
+            try:
+                await asyncio.wait_for(asyncio.shield(langflow_task), timeout=step_delay)
+                break  # response came early — stop faking
+            except asyncio.TimeoutError:
+                pass
+            if langflow_task.done():
+                break
+            yield json.dumps({"type": "step", "step": {"name": AGENT_STEPS[i - 1], "status": "done"}}).encode() + b"\n"
+            yield json.dumps({"type": "step", "step": {"name": AGENT_STEPS[i], "status": "running"}}).encode() + b"\n"
+
+        # ── 4. Await result and emit end / error ──────────────────────────────
+        try:
+            data, error = await langflow_task
+        except Exception as exc:
+            yield json.dumps({"type": "error", "message": str(exc)}).encode() + b"\n"
+            return
+
+        if error:
+            yield json.dumps({"type": "error", "message": error}).encode() + b"\n"
+            return
+
+        # Mark all steps done
+        for step in AGENT_STEPS:
+            yield json.dumps({"type": "step", "step": {"name": step, "status": "done"}}).encode() + b"\n"
+
+        message_text, scores = _extract_text_and_scores(data)
+        session_id = data.get("session_id") or req.session_id or str(uuid.uuid4())
+
+        yield json.dumps({
+            "type": "end",
+            "message": message_text,
+            "scores": scores,
+            "session_id": session_id,
+        }).encode() + b"\n"
 
     return StreamingResponse(
-        stream_langflow(),
+        generate(),
         media_type="text/plain",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
-class LangFlowRequest(BaseModel):
-    input_value: str
-    session_id: Optional[str] = None
+async def _call_langflow_async(payload: dict) -> tuple[dict, Optional[str]]:
+    """Returns (response_data, error_message). One of them will be None."""
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        resp = await client.post(_langflow_url(), json=payload, headers=_langflow_headers())
+        if resp.status_code >= 400:
+            return {}, resp.text
+        return resp.json(), None
 
 
 @app.post("/langflow-test")
 async def langflow_test(req: LangFlowRequest):
-    api_key = os.getenv("LANGFLOW_API_KEY", "YOUR_API_KEY_HERE")
-    url = "http://localhost:7860/api/v1/run/284e7b53-4a64-46b0-826a-d659918a5390"
+    """Simple non-streaming endpoint for testing the Langflow connection."""
+    if not LANGFLOW_FLOW_ID:
+        raise HTTPException(status_code=500, detail="LANGFLOW_FLOW_ID not configured")
 
     payload = {
         "output_type": "chat",
         "input_type": "chat",
-        "input_value": req.input_value
+        "input_value": req.input_value,
+        "session_id": req.session_id or str(uuid.uuid4()),
     }
-    payload["session_id"] = req.session_id or str(uuid.uuid4())
-
-    headers = {"x-api-key": api_key, "Content-Type": "application/json"}
 
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(url, json=payload, headers=headers)
+            resp = await client.post(_langflow_url(), json=payload, headers=_langflow_headers())
             resp.raise_for_status()
-            return {"response": resp.text}
+            data = resp.json()
+            message_text, scores = _extract_text_and_scores(data)
+            return {
+                "response": message_text,
+                "scores": scores,
+                "raw": data,
+            }
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
     except httpx.RequestError as e:
-        raise HTTPException(status_code=500, detail=f"Error making API request: {str(e)}")
-    except ValueError as e:
-        raise HTTPException(status_code=500, detail=f"Error parsing response: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Connection error: {str(e)}")
