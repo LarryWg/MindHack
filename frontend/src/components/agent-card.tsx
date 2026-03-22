@@ -1,5 +1,7 @@
 "use client";
 
+import { REGIONS } from "./brain-atlas";
+
 type Marker = { name: string; value: number; unit?: string };
 
 export type AgentCardProps = {
@@ -12,51 +14,9 @@ export type AgentCardProps = {
   isLoading?: boolean;
 };
 
-function scoreColor(score: number): string {
-  if (score > 75) return "#D85A30";
-  if (score > 50) return "#BA7517";
-  if (score > 25) return "#1D9E75";
-  return "#888780";
-}
-
-export const MOCK_AGENTS: AgentCardProps[] = [
-  {
-    agentName: "Lexical Agent",
-    primerSet: "TTR · Density · Filler",
-    brainRegion: "Broca's Area",
-    markers: [
-      { name: "TTR", value: 68 },
-      { name: "Lexical density", value: 74 },
-      { name: "Filler rate", value: 42 },
-    ],
-    topScore: 72,
-  },
-  {
-    agentName: "Semantic Agent",
-    primerSet: "Coherence · Density · Tang",
-    brainRegion: "Wernicke's Area",
-    markers: [
-      { name: "Coherence", value: 58 },
-      { name: "Idea density", value: 61 },
-      { name: "Tangentiality", value: 33 },
-    ],
-    topScore: 58,
-  },
-  {
-    agentName: "Prosody Agent",
-    primerSet: "Rate · Pause · Hesitation",
-    brainRegion: "SMA",
-    markers: [
-      { name: "Speech rate", value: 44, unit: "wpm" },
-      { name: "Pause freq", value: 51, unit: "/min" },
-      { name: "Hesitation", value: 38 },
-    ],
-    topScore: 44,
-  },
-  {
-    agentName: "Syntax Agent",
+const AGENT_DETAILS: Record<string, { primerSet: string; markers: Marker[]; topScore: number }> = {
+  Syntax: {
     primerSet: "MLU · Depth · Passive",
-    brainRegion: "DLPFC",
     markers: [
       { name: "MLU", value: 83 },
       { name: "Clause depth", value: 79 },
@@ -64,7 +24,61 @@ export const MOCK_AGENTS: AgentCardProps[] = [
     ],
     topScore: 83,
   },
-];
+  Lexical: {
+    primerSet: "TTR · Density · Filler",
+    markers: [
+      { name: "TTR", value: 68 },
+      { name: "Lexical density", value: 74 },
+      { name: "Filler rate", value: 42 },
+    ],
+    topScore: 72,
+  },
+  Semantic: {
+    primerSet: "Coherence · Density · Tang",
+    markers: [
+      { name: "Coherence", value: 58 },
+      { name: "Idea density", value: 61 },
+      { name: "Tangentiality", value: 33 },
+    ],
+    topScore: 58,
+  },
+  Prosody: {
+    primerSet: "Rate · Pause · Hesitation",
+    markers: [
+      { name: "Speech rate", value: 44, unit: "wpm" },
+      { name: "Pause freq", value: 51, unit: "/min" },
+      { name: "Hesitation", value: 38 },
+    ],
+    topScore: 44,
+  },
+  Affective: {
+    primerSet: "Valence · Arousal · Intensity",
+    markers: [
+      { name: "Valence", value: 55 },
+      { name: "Arousal", value: 62 },
+      { name: "Intensity", value: 48 },
+    ],
+    topScore: 62,
+  },
+};
+
+function scoreColor(score: number): string {
+  if (score > 75) return "#D85A30";
+  if (score > 50) return "#BA7517";
+  if (score > 25) return "#1D9E75";
+  return "#888780";
+}
+
+export const MOCK_AGENTS: AgentCardProps[] = REGIONS.map((region) => {
+  const details = AGENT_DETAILS[region.agent];
+  return {
+    agentName: `${region.agent} Agent`,
+    primerSet: details.primerSet,
+    brainRegion: region.label,
+    markers: details.markers,
+    topScore: details.topScore,
+  };
+});
 
 export function AgentCard({
   agentName,
