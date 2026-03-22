@@ -131,12 +131,14 @@ body {
 }
 
 /* ─── Scrollbar ──────────────────────────────────────────── */
-::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
   background: var(--nt-track);
   border-radius: 2px;
 }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
 
 /* ─── Animations ─────────────────────────────────────────── */
 @keyframes pulse-dot {
@@ -158,6 +160,26 @@ body {
 @keyframes splash-pulse {
   0%, 100% { opacity: 0.3; transform: scale(0.8); }
   50%       { opacity: 1;   transform: scale(1); }
+}
+
+@keyframes card-enter {
+  0%   { opacity: 0; transform: scale(0.5) translateY(14px); }
+  65%  { opacity: 1; transform: scale(1.1) translateY(-3px);  }
+  100% { opacity: 1; transform: scale(1)   translateY(0px);   }
+}
+@keyframes card-float {
+  0%, 100% { transform: translateY(0px);  }
+  50%       { transform: translateY(-8px); }
+}
+@keyframes face-pop {
+  0%   { opacity: 0; transform: scale(0.55) rotate(-8deg); }
+  55%  { opacity: 1; transform: scale(1.1)  rotate(2deg);  }
+  100% { opacity: 1; transform: scale(1)    rotate(0deg);  }
+}
+@keyframes face-idle {
+  0%, 100% { transform: translateY(0px)  rotate(0deg);  }
+  30%       { transform: translateY(-7px) rotate(1.5deg);}
+  70%       { transform: translateY(-3px) rotate(-1deg); }
 }
 
 .animate-fade-up    { animation: fade-up 0.5s ease-out both; }

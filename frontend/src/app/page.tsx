@@ -15,6 +15,7 @@ import GlassSurface from "@/components/GlassSurface";
 import type { RegionActivation } from "@/components/brain-viewer";
 import { useAnalysisHistory } from "@/hooks/useAnalysisHistory";
 import { useTheme } from "@/hooks/useTheme";
+import { NeuroRadarChart } from "@/components/radar-chart";
 
 // ─── Brain region definitions ─────────────────────────────────────────────────
 
@@ -574,6 +575,129 @@ function MiniAgentCard({ agent, isActive }: { agent: AgentCardProps; isActive: b
   );
 }
 
+// ─── Processing steps overlay ────────────────────────────────────────────────
+
+const STEP_REGIONS: Record<string, string> = {
+  "STT preprocessor": "Whisper · Pause map",
+  "Lexical agent":     "Broca's area",
+  "Semantic agent":    "Wernicke's area",
+  "Prosody agent":     "SMA",
+  "Syntax agent":      "DLPFC",
+  "Biomarker mapper":  "MNI normalisation",
+  "Report composer":   "Claude claude-sonnet-4-6",
+};
+
+function ProcessingSteps({ steps, glass }: { steps: AgentStep[]; glass: React.CSSProperties }) {
+  const doneCount  = steps.filter((s) => s.status === "done").length;
+  const totalCount = steps.length;
+  const pct        = totalCount ? Math.round((doneCount / totalCount) * 100) : 0;
+
+  return (
+    <div className="w-full flex flex-col gap-3 animate-fade-up" style={{ animationFillMode: "both" }}>
+
+      {/* Progress bar + label */}
+      <div className="flex items-center justify-between mb-0.5">
+        <span
+          style={{
+            color: "var(--nt-text-xs)",
+            fontSize: 9,
+            fontFamily: "var(--font-jetbrains-mono)",
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+          }}
+        >
+          Pipeline · {doneCount}/{totalCount} complete
+        </span>
+        <span style={{ color: "var(--nt-text-xs)", fontSize: 9, fontFamily: "var(--font-jetbrains-mono)" }}>
+          {pct}%
+        </span>
+      </div>
+      <div className="h-px w-full rounded-full overflow-hidden mb-1" style={{ background: "var(--nt-track)" }}>
+        <div
+          className="h-full rounded-full transition-all duration-700"
+          style={{ width: `${pct}%`, background: "linear-gradient(90deg, #3b82f6, #8b5cf6)" }}
+        />
+      </div>
+
+      {/* Step rows */}
+      <div className="rounded-2xl overflow-hidden" style={glass}>
+        {steps.map((step, i) => {
+          const isRunning = step.status === "running";
+          const isDone    = step.status === "done";
+          const isError   = step.status === "error";
+          const region    = STEP_REGIONS[step.name] ?? "";
+
+          return (
+            <div
+              key={step.name}
+              className="flex items-center gap-3 px-4 py-2.5 transition-colors duration-300 animate-fade-up"
+              style={{
+                animationDelay: `${i * 55}ms`,
+                animationFillMode: "both",
+                borderBottom: i < steps.length - 1 ? "1px solid var(--nt-divider)" : "none",
+                background: isRunning ? "var(--nt-hover)" : "transparent",
+              }}
+            >
+              {/* Status dot */}
+              <div className="w-4 h-4 flex items-center justify-center shrink-0">
+                {isRunning && (
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse-amber" />
+                )}
+                {isDone && (
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <path d="M2 6l3 3 5-5" stroke="#1D9E75" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+                {isError && (
+                  <span style={{ color: "#D85A30", fontSize: 11, fontWeight: 700, lineHeight: 1 }}>✕</span>
+                )}
+                {step.status === "pending" && (
+                  <span className="w-1.5 h-1.5 rounded-full block" style={{ background: "var(--nt-track)" }} />
+                )}
+              </div>
+
+              {/* Name + region */}
+              <div className="flex-1 min-w-0">
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontFamily: "var(--font-dm-sans)",
+                    fontWeight: isRunning ? 600 : 400,
+                    color: isRunning ? "var(--nt-text-hi)" : isDone ? "var(--nt-text-lo)" : "var(--nt-text-ghost)",
+                    transition: "color 0.3s",
+                  }}
+                >
+                  {step.name}
+                </div>
+                {region && (
+                  <div style={{ fontSize: 9, fontFamily: "var(--font-jetbrains-mono)", color: "var(--nt-text-ghost)", marginTop: 1 }}>
+                    {region}
+                  </div>
+                )}
+              </div>
+
+              {/* Status tag */}
+              <span
+                className="shrink-0 text-[8px] font-semibold tracking-widest uppercase px-1.5 py-0.5 rounded-md"
+                style={{
+                  fontFamily: "var(--font-jetbrains-mono)",
+                  color: isRunning ? "#f59e0b" : isDone ? "#1D9E75" : isError ? "#D85A30" : "var(--nt-text-ghost)",
+                  background: isRunning ? "rgba(245,158,11,0.10)" : isDone ? "rgba(29,158,117,0.08)" : "transparent",
+                  border: isRunning ? "1px solid rgba(245,158,11,0.22)" : isDone ? "1px solid rgba(29,158,117,0.18)" : "1px solid transparent",
+                  minWidth: 36,
+                  textAlign: "center",
+                }}
+              >
+                {isRunning ? "live" : isDone ? "done" : isError ? "err" : "·"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -877,239 +1001,145 @@ export default function DashboardPage() {
               <BiomarkersPanel />
             </div>
 
-            {/* ══════ PHASE 1 — Pre-submission, centred ══════ */}
+            {/* ══════ PHASE 1 — Pre-submission + Processing ══════ */}
             <div
-              className="absolute inset-0 flex flex-col items-center justify-center px-8 transition-all duration-[400ms] ease-out"
+              className="absolute inset-0 flex flex-col items-center justify-center px-8 transition-all duration-[400ms] ease-out overflow-y-auto"
               style={{
-                opacity: hasStarted || activePage === "history" || activePage === "brain regions" || activePage === "biomarkers" || activePage === "dashboard" ? 0 : 1,
-                transform: hasStarted ? "translateY(-24px)" : "translateY(0)",
-                pointerEvents: hasStarted || activePage === "history" || activePage === "brain regions" || activePage === "biomarkers" || activePage === "dashboard" ? "none" : "auto",
+                opacity: (hasStarted && !isLoading) || activePage === "history" || activePage === "brain regions" || activePage === "biomarkers" || activePage === "dashboard" ? 0 : 1,
+                transform: hasStarted && !isLoading ? "translateY(-24px)" : "translateY(0)",
+                pointerEvents: (hasStarted && !isLoading) || activePage === "history" || activePage === "brain regions" || activePage === "biomarkers" || activePage === "dashboard" ? "none" : "auto",
               }}
-              aria-hidden={hasStarted || activePage === "history" || activePage === "brain regions"}
+              aria-hidden={(hasStarted && !isLoading) || activePage === "history" || activePage === "brain regions" || activePage === "biomarkers" || activePage === "dashboard"}
             >
-              <div className="mb-8 flex flex-col items-center gap-2">
-                <span
-                  className="text-[30px] font-light tracking-[0.14em]"
-                  style={{
-                    fontFamily: "var(--font-syne), sans-serif",
-                    color: "var(--nt-text-hi)",
-                    textShadow: "0 0 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.14)",
-                  }}
-                >
-                  neurotrace
-                </span>
-                <span
-                  className="text-[11px] tracking-[0.32em] uppercase font-medium"
-                  style={{
-                    color: "var(--nt-text-md)",
-                    textShadow: "0 1px 4px rgba(0,0,0,0.12)",
-                  }}
-                >
-                  cognitive signature analysis
-                </span>
-              </div>
-              <AnalysisPanel
-                onSubmit={handleSubmit}
-                isLoading={isLoading}
-                agentSteps={[]}
-                placeholder="Paste text or record speech to begin analysis…"
-              />
-            </div>
+              <div className="w-full max-w-[42rem] flex flex-col items-center gap-5 py-8">
 
-            {/* ══════ PHASE 2 — Post-submission, hero brain layout ══════ */}
-            <div
-              className="absolute inset-0 flex gap-2.5 transition-all duration-[400ms] ease-out"
-              style={{
-                opacity: hasStarted && activePage !== "history" && activePage !== "brain regions" && activePage !== "biomarkers" && activePage !== "dashboard" ? 1 : 0,
-                transform: hasStarted ? "none" : "translateY(24px)",
-                pointerEvents: hasStarted && activePage !== "history" && activePage !== "brain regions" && activePage !== "biomarkers" && activePage !== "dashboard" ? "auto" : "none",
-                padding: "10px",
-              }}
-              aria-hidden={!hasStarted || activePage === "history" || activePage === "brain regions"}
-            >
-              {/* ── LEFT: Brain hero (60%) ── */}
-              <div
-                className="rounded-2xl overflow-hidden relative flex-shrink-0"
-                style={{ flex: "3 0 0%", ...glassStyle }}
-              >
-                {/* MNI badge */}
-                <div
-                  className="absolute top-3 left-3 z-10 px-2 py-0.5 rounded-md text-[9px] font-semibold tracking-widest uppercase pointer-events-none"
-                  style={{
-                    background: "var(--nt-glass)",
-                    backdropFilter: "blur(8px)",
-                    color: "var(--nt-text-lo)",
-                    border: "1px solid var(--nt-glass-border)",
-                    fontFamily: "var(--font-jetbrains-mono)",
-                  }}
-                >
-                  MNI152 · 3D Atlas
-                </div>
-
-                {/* Active agent badge */}
-                {activeAgentName && (
-                  <div
-                    className="absolute top-3 right-3 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[9px] font-semibold tracking-widest uppercase"
+                {/* Title */}
+                <div className="flex flex-col items-center gap-2">
+                  <span
+                    className="text-[30px] font-light tracking-[0.14em]"
                     style={{
-                      background: "var(--nt-glass)",
-                      backdropFilter: "blur(8px)",
-                      color: "#f5a46a",
-                      border: "1px solid rgba(216,90,48,0.28)",
-                      fontFamily: "var(--font-jetbrains-mono)",
+                      fontFamily: "var(--font-syne), sans-serif",
+                      color: "var(--nt-text-hi)",
+                      textShadow: "0 0 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.14)",
                     }}
                   >
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                    {activeAgentName}
+                    neurotrace
+                  </span>
+                  <span
+                    className="text-[11px] tracking-[0.32em] uppercase font-medium"
+                    style={{
+                      color: "var(--nt-text-md)",
+                      textShadow: "0 1px 4px rgba(0,0,0,0.12)",
+                    }}
+                  >
+                    cognitive signature analysis
+                  </span>
+                </div>
+
+                {/* Agent pipeline — appears above input while processing */}
+                {agentSteps.length > 0 && (
+                  <div className="w-full">
+                    <ProcessingSteps steps={agentSteps} glass={glassStyle} />
                   </div>
                 )}
 
-                {/* Activation legend — bottom left */}
+                {/* Input panel — dimmed while agents are running */}
+                <div
+                  className="w-full transition-opacity duration-300"
+                  style={{ opacity: isLoading ? 0.45 : 1, pointerEvents: isLoading ? "none" : "auto" }}
+                >
+                  <AnalysisPanel
+                    onSubmit={handleSubmit}
+                    isLoading={isLoading}
+                    agentSteps={[]}
+                    placeholder="Paste text or record speech to begin analysis…"
+                  />
+                </div>
+
+              </div>
+            </div>
+
+            {/* ══════ PHASE 2 — Brain left · Report right · Input bottom ══════ */}
+            <div
+              className="absolute inset-0 flex flex-col gap-2.5 transition-all duration-[400ms] ease-out"
+              style={{
+                opacity: hasStarted && !isLoading && activePage !== "history" && activePage !== "brain regions" && activePage !== "biomarkers" && activePage !== "dashboard" ? 1 : 0,
+                transform: hasStarted && !isLoading ? "none" : "translateY(24px)",
+                pointerEvents: hasStarted && !isLoading && activePage !== "history" && activePage !== "brain regions" && activePage !== "biomarkers" && activePage !== "dashboard" ? "auto" : "none",
+                padding: "10px",
+              }}
+              aria-hidden={!hasStarted || isLoading || activePage === "history" || activePage === "brain regions" || activePage === "biomarkers" || activePage === "dashboard"}
+            >
+              {/* ── Top row: Brain + Report ── */}
+              <div className="flex gap-2.5 flex-1 min-h-0">
+
+              {/* ── LEFT: Brain viewer (60%) ── */}
+              <div className="rounded-2xl overflow-hidden relative" style={{ flex: "3 0 0%", ...glassStyle }}>
+                {/* MNI badge */}
+                <div className="absolute top-3 left-3 z-10 px-2 py-0.5 rounded-md text-[9px] font-semibold tracking-widest uppercase pointer-events-none"
+                  style={{ background: "var(--nt-glass)", backdropFilter: "blur(8px)", color: "var(--nt-text-lo)", border: "1px solid var(--nt-glass-border)", fontFamily: "var(--font-jetbrains-mono)" }}>
+                  MNI152 · 3D Atlas
+                </div>
+
+                {/* Activation legend */}
                 {biomarkerScores && (
-                  <div
-                    className="absolute bottom-3 left-3 z-10 flex flex-col gap-1 p-2 rounded-xl pointer-events-none"
-                    style={{
-                      background: "var(--nt-glass)",
-                      backdropFilter: "blur(8px)",
-                      border: "1px solid var(--nt-glass-border)",
-                    }}
-                  >
+                  <div className="absolute bottom-3 left-3 z-10 flex flex-col gap-1 p-2 rounded-xl pointer-events-none"
+                    style={{ background: "var(--nt-glass)", backdropFilter: "blur(8px)", border: "1px solid var(--nt-glass-border)" }}>
                     {BRAIN_REGIONS.map((r) => {
                       const score = biomarkerScores[AGENT_KEY[r.agent]] ?? 0;
                       const color = scoreColor(score * 100);
                       return (
                         <div key={r.region} className="flex items-center gap-2">
-                          <div
-                            className="w-2 h-2 rounded-full shrink-0"
-                            style={{ background: color, opacity: 0.4 + score * 0.6 }}
-                          />
-                          <span
-                            className="text-[9px] uppercase tracking-wider"
-                            style={{ color: "var(--nt-text-lo)", fontFamily: "var(--font-jetbrains-mono)", minWidth: 70 }}
-                          >
-                            {r.region}
-                          </span>
-                          <div
-                            className="w-12 h-0.5 rounded-full overflow-hidden" style={{ background: "var(--nt-track)" }}
-                          >
-                            <div
-                              className="h-full rounded-full transition-all duration-700"
-                              style={{ width: `${score * 100}%`, background: color }}
-                            />
+                          <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color, opacity: 0.4 + score * 0.6 }} />
+                          <span className="text-[9px] uppercase tracking-wider" style={{ color: "var(--nt-text-lo)", fontFamily: "var(--font-jetbrains-mono)", minWidth: 70 }}>{r.region}</span>
+                          <div className="w-12 h-0.5 rounded-full overflow-hidden" style={{ background: "var(--nt-track)" }}>
+                            <div className="h-full rounded-full transition-all duration-700" style={{ width: `${score * 100}%`, background: color }} />
                           </div>
-                          <span
-                            className="text-[9px] tabular-nums w-6 text-right"
-                            style={{ color, fontFamily: "var(--font-jetbrains-mono)" }}
-                          >
-                            {Math.round(score * 100)}
-                          </span>
+                          <span className="text-[9px] tabular-nums w-6 text-right" style={{ color, fontFamily: "var(--font-jetbrains-mono)" }}>{Math.round(score * 100)}</span>
                         </div>
                       );
                     })}
                   </div>
                 )}
 
-                {/* Instruction hint */}
-                {!biomarkerScores && !isLoading && (
-                  <div
-                    className="absolute bottom-3 right-3 z-10 text-[9px] pointer-events-none"
-                    style={{
-                      color: "var(--nt-text-ghost)",
-                      fontFamily: "var(--font-jetbrains-mono)",
-                    }}
-                  >
-                    Drag to rotate · Scroll to zoom
-                  </div>
-                )}
+                <div className="absolute bottom-3 right-3 z-10 text-[9px] pointer-events-none"
+                  style={{ color: "var(--nt-text-ghost)", fontFamily: "var(--font-jetbrains-mono)" }}>
+                  Drag · Scroll to zoom
+                </div>
 
                 <BrainViewer activations={activations} onRegionClick={(r) => console.log("Region clicked:", r)} activeAgentName={activeAgentName} />
               </div>
 
-              {/* ── RIGHT: Agents + waveform + input (40%) ── */}
-              <div className="flex flex-col gap-2.5 min-w-0" style={{ flex: "2 0 0%" }}>
-                {/* Agent cards horizontal scroll */}
-                <div className="relative shrink-0">
-                  <div className="overflow-hidden rounded-xl relative" style={{ minHeight: "200px" }}>
-                    <div 
-                      className="flex transition-transform duration-300 ease-in-out"
-                      style={{ transform: `translateX(-${currentAgentIndex * 100}%)` }}
-                    >
-                      {agentCards.map((agent) => (
-                        <div key={agent.agentName} className="w-full flex-shrink-0">
-                          <MiniAgentCard
-                            agent={agent}
-                            isActive={isLoading && activeAgentName === agent.agentName.replace(" Agent", "")}
-                          />
+              {/* ── RIGHT: Report (40%) — always visible ── */}
+              <div className="rounded-2xl overflow-hidden flex flex-col" style={{ flex: "2 0 0%", ...glassStyle }}>
+                <div className="flex-1 min-h-0 overflow-y-auto">
+                  {cognitiveReport ? (
+                    <>
+                      <ReportPanel report={cognitiveReport} />
+                      {wordTimestamps && wordTimestamps.length > 0 && (
+                        <div className="px-1 pb-2">
+                          <WaveformPanel wordTimestamps={wordTimestamps} duration={audioDuration} />
                         </div>
-                      ))}
-                    </div>
-                    
-                    {/* Navigation controls inside the box */}
-                    <div className="absolute inset-0 flex items-end justify-between px-2 pb-18 pointer-events-none">
-                      <button
-                        onClick={prevAgent}
-                        className="w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 backdrop-blur shadow-lg pointer-events-auto"
-                        style={{ background: "var(--nt-glass)", border: "1px solid var(--nt-glass-border)" }}
-                        aria-label="Previous agent"
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: 'var(--nt-text-md)' }}>
-                          <path d="M15 18l-6-6 6-6"/>
-                        </svg>
-                      </button>
-                      
-                      <div className="flex justify-center gap-1.5 px-2 pointer-events-auto">
-                        {agentCards.map((_, index) => (
-                          <button
-                            key={index}
-                            onClick={() => setCurrentAgentIndex(index)}
-                            className="w-2.5 h-2.5 rounded-full transition-all duration-200 backdrop-blur"
-                            style={{
-                              background: index === currentAgentIndex ? "var(--nt-btn-bg)" : "var(--nt-track)",
-                              border: index === currentAgentIndex ? "1px solid var(--nt-glass-border)" : "1px solid var(--nt-divider)",
-                            }}
-                            aria-label={`Go to agent ${index + 1}`}
-                          />
-                        ))}
-                      </div>
-                      
-                      <button
-                        onClick={nextAgent}
-                        className="w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 backdrop-blur shadow-lg pointer-events-auto"
-                        style={{ background: "var(--nt-glass)", border: "1px solid var(--nt-glass-border)" }}
-                        aria-label="Next agent"
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: 'var(--nt-text-md)' }}>
-                          <path d="M9 18l6-6-6-6"/>
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
+                      )}
+                    </>
+                  ) : null}
                 </div>
+              </div>
 
-                {/* Waveform + transcript (only when voice analysed) */}
-                {wordTimestamps && wordTimestamps.length > 0 && (
-                  <WaveformPanel wordTimestamps={wordTimestamps} duration={audioDuration} />
-                )}
+              </div>{/* end top row */}
 
-                {/* Cognitive report */}
-                {cognitiveReport && (
-                  <div className="flex-1 min-h-0 overflow-y-auto">
-                    <ReportPanel report={cognitiveReport} />
-                  </div>
-                )}
-
-                {/* Spacer when no report */}
-                {!cognitiveReport && (!wordTimestamps || wordTimestamps.length === 0) && <div className="flex-1" />}
-
-                {/* Analysis input */}
-                <div className="shrink-0">
+              {/* ── BOTTOM CENTER: Chat input ── */}
+              <div className="shrink-0 flex justify-center">
+                <div style={{ width: "100%", maxWidth: 660 }}>
                   <AnalysisPanel
                     onSubmit={handleSubmit}
                     isLoading={isLoading}
-                    agentSteps={agentSteps}
-                    placeholder="Ask about this cognitive signature…"
+                    agentSteps={[]}
+                    placeholder="Analyze again or ask a follow-up…"
                   />
                 </div>
               </div>
+
             </div>
           </div>
         </div>
