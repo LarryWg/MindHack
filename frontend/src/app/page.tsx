@@ -27,6 +27,14 @@ const AGENT_KEY: Record<string, string> = {
   Prosody: "prosody", Syntax: "syntax", Affective: "affective",
 };
 
+const REGION_ID_MAP: Record<string, string> = {
+  "Broca's area": "broca",
+  "Wernicke's area": "wernicke",
+  "DLPFC": "dlpfc",
+  "SMA": "sma",
+  "Amygdala": "amygdala",
+};
+
 function scoreColor(v: number) {
   if (v > 75) return "#D85A30";
   if (v > 50) return "#BA7517";
@@ -38,6 +46,7 @@ function scoreColor(v: number) {
 
 const Dither = dynamic(() => import("@/components/Dither"), { ssr: false });
 const BrainViewer = dynamic(() => import("@/components/brain-viewer"), { ssr: false });
+const BrainAtlas = dynamic(() => import("@/components/brain-atlas"), { ssr: false });
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -136,6 +145,15 @@ export default function DashboardPage() {
     if (!running) return undefined;
     return { "Lexical agent": "Lexical", "Semantic agent": "Semantic", "Prosody agent": "Prosody", "Syntax agent": "Syntax" }[running.name];
   }, [agentSteps]);
+
+  const atlasActivations = useMemo(() => {
+    const record: Record<string, number> = {};
+    activations.forEach((r) => {
+      const id = REGION_ID_MAP[r.region];
+      if (id) record[id] = r.activation;
+    });
+    return record;
+  }, [activations]);
 
   // Shift+P toggles side panels (kept for power users)
   useEffect(() => {
@@ -456,7 +474,7 @@ export default function DashboardPage() {
                   </div>
                 )}
 
-                <BrainViewer activations={activations} activeAgentName={activeAgentName} />
+                <BrainAtlas activations={atlasActivations} activeAgent={activeAgentName} />
               </div>
 
               {/* ── RIGHT: Agents + waveform + input (40%) ── */}

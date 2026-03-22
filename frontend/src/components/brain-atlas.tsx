@@ -169,7 +169,7 @@ export function scoreToClassification(score: number): string {
    Component
    ═══════════════════════════════════════════════════════════ */
 
-export function BrainAtlas({
+export default function BrainAtlas({
   activations = {},
   classifications = {},
   activeAgent,
