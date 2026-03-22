@@ -26,6 +26,7 @@ type BrainViewerProps = {
   activations?: RegionActivation[];
   onRegionClick?: (r: RegionActivation) => void;
   activeAgentName?: string;
+  showLabels?: boolean;
 };
 
 // ─── Region mesh config (maps region name → OBJ file + color) ────────
@@ -350,12 +351,24 @@ function RegionInfoPanel({
 
 // ─── Main component (imperative Three.js — NeuraLens approach) ────────
 
+// Label color per region (matches the biomarker palette)
+const REGION_LABEL_COLORS: Record<string, string> = {
+  "Broca's area":    "#ff6b6b",
+  "Wernicke's area": "#f59e0b",
+  "DLPFC":           "#00e5ff",
+  "SMA":             "#1d9e75",
+  "Amygdala":        "#a855f7",
+};
+
 export default function BrainViewer({
   activations = DEFAULT_REGIONS,
   onRegionClick,
   activeAgentName: _activeAgentName,
+  showLabels = false,
 }: BrainViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const labelElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const showLabelsRef = useRef(showLabels);
   type ConnectionParticle = {
     mesh: THREE.Mesh;
     curve: THREE.CatmullRomCurve3;
@@ -388,6 +401,7 @@ export default function BrainViewer({
   activationsRef.current = activations;
   const onRegionClickRef = useRef(onRegionClick);
   onRegionClickRef.current = onRegionClick;
+  showLabelsRef.current = showLabels;
 
   // Initialize Three.js scene
   useEffect(() => {
@@ -571,6 +585,34 @@ export default function BrainViewer({
 
       s.controls.update();
       s.renderer.render(s.scene, s.camera);
+
+      // ── Project region centers to 2D and update label positions ──────
+      if (showLabelsRef.current && labelElsRef.current.size > 0) {
+        const w = container.clientWidth;
+        const h = container.clientHeight;
+        const brainCenter = new THREE.Vector3(0, 0.1, 0);
+        const camDir = s.camera.position.clone().sub(brainCenter).normalize();
+
+        s.regionCenters.forEach((center, regionName) => {
+          const el = labelElsRef.current.get(regionName);
+          if (!el) return;
+
+          const vec = center.clone();
+          vec.project(s.camera);
+
+          const x = (vec.x * 0.5 + 0.5) * w;
+          const y = (-vec.y * 0.5 + 0.5) * h;
+
+          // Fade out labels on the back side of the brain
+          const outward = center.clone().sub(brainCenter).normalize();
+          const facing = outward.dot(camDir);
+          const opacity = Math.max(0, Math.min(1, facing * 2.8 + 0.5));
+
+          el.style.left = `${x}px`;
+          el.style.top = `${y}px`;
+          el.style.opacity = String(opacity);
+        });
+      }
     };
     animate();
 
@@ -928,6 +970,87 @@ export default function BrainViewer({
       {hoveredData && !selectedRegion && (
         <HoverTooltip region={hoveredData} x={mousePos.x} y={mousePos.y} />
       )}
+
+      {/* ── Region labels (3D→2D projected, only when showLabels=true) ── */}
+      {showLabels && activations.map((region) => {
+        const color = REGION_LABEL_COLORS[region.region] ?? activationColor(region.activation);
+        const isHovered = hoveredRegion === region.region;
+        return (
+          <div
+            key={region.region}
+            ref={(el) => {
+              if (el) labelElsRef.current.set(region.region, el);
+              else labelElsRef.current.delete(region.region);
+            }}
+            className="pointer-events-none absolute"
+            style={{
+              transform: "translate(-50%, calc(-100% - 10px))",
+              opacity: 0,
+              transition: "opacity 0.15s",
+              zIndex: isHovered ? 25 : 10,
+            }}
+          >
+            {/* Label pill */}
+            <div
+              style={{
+                background: "rgba(6, 8, 14, 0.82)",
+                backdropFilter: "blur(10px)",
+                border: `1px solid ${color}50`,
+                borderRadius: 8,
+                padding: "3px 8px 3px 6px",
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                boxShadow: `0 0 10px ${color}18, 0 2px 8px rgba(0,0,0,0.5)`,
+                whiteSpace: "nowrap",
+                transform: isHovered ? "scale(1.08)" : "scale(1)",
+                transition: "transform 0.15s",
+              }}
+            >
+              <div
+                style={{
+                  width: 5,
+                  height: 5,
+                  borderRadius: "50%",
+                  background: color,
+                  boxShadow: `0 0 6px ${color}`,
+                  flexShrink: 0,
+                }}
+              />
+              <span
+                style={{
+                  color: "rgba(255,255,255,0.92)",
+                  fontSize: 9.5,
+                  fontFamily: "var(--font-syne)",
+                  fontWeight: 600,
+                  letterSpacing: "0.01em",
+                }}
+              >
+                {region.region}
+              </span>
+              <span
+                style={{
+                  color: color,
+                  fontSize: 7.5,
+                  fontFamily: "var(--font-jetbrains-mono)",
+                  opacity: 0.75,
+                }}
+              >
+                {region.agent}
+              </span>
+            </div>
+            {/* Connector stem */}
+            <div
+              style={{
+                width: 1,
+                height: 10,
+                background: `linear-gradient(to bottom, ${color}60, transparent)`,
+                margin: "0 auto",
+              }}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }

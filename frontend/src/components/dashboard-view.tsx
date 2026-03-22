@@ -163,7 +163,7 @@ function KpiCard({ label, value, sub, accentColor, icon, delay = 0, trend }: Kpi
 
   return (
     <div
-      className="animate-fade-up flex flex-col gap-2 p-4 rounded-2xl relative overflow-hidden"
+      className="animate-fade-up flex flex-col gap-2 p-4 rounded-2xl relative overflow-hidden min-w-0"
       style={{ ...GLASS, animationDelay: `${delay}ms`, animationFillMode: "both" }}
     >
       {/* Accent glow */}
@@ -194,14 +194,16 @@ function KpiCard({ label, value, sub, accentColor, icon, delay = 0, trend }: Kpi
         <div style={{ color: accentColor ?? "var(--nt-icon)", opacity: 0.7 }}>{icon}</div>
       </div>
 
-      <div className="flex items-end gap-2">
+      <div className="flex items-end gap-2 min-w-0">
         <span
+          className="truncate"
           style={{
             color: accentColor ?? "var(--nt-text-hi)",
             fontSize: 28,
             fontFamily: "var(--font-jetbrains-mono)",
             fontWeight: 700,
             lineHeight: 1,
+            minWidth: 0,
           }}
         >
           {value}
@@ -212,7 +214,7 @@ function KpiCard({ label, value, sub, accentColor, icon, delay = 0, trend }: Kpi
       </div>
 
       {sub && (
-        <span style={{ color: "var(--nt-text-xs)", fontSize: 10, fontFamily: "var(--font-dm-sans)" }}>
+        <span className="truncate block" style={{ color: "var(--nt-text-xs)", fontSize: 10, fontFamily: "var(--font-dm-sans)" }}>
           {sub}
         </span>
       )}
@@ -624,7 +626,10 @@ export function DashboardView({ entries, onStartAnalysis }: DashboardViewProps) 
                   return (
                     <div key={i} className="flex items-start gap-2">
                       <div className="w-1 h-1 rounded-full mt-1.5 shrink-0" style={{ background: sev }} />
-                      <span style={{ color: "var(--nt-text-lo)", fontSize: 10, fontFamily: "var(--font-dm-sans)", lineHeight: 1.5 }}>
+                      <span
+                        className="line-clamp-2"
+                        style={{ color: "var(--nt-text-lo)", fontSize: 10, fontFamily: "var(--font-dm-sans)", lineHeight: 1.5 }}
+                      >
                         {ri.indicator}
                       </span>
                     </div>
@@ -662,7 +667,7 @@ export function DashboardView({ entries, onStartAnalysis }: DashboardViewProps) 
               return (
                 <div
                   key={entry.id}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors duration-150"
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors duration-150 min-w-0 overflow-hidden"
                   style={{
                     background: isFirst ? "var(--nt-active)" : "transparent",
                     border: isFirst ? "1px solid var(--nt-glass-border)" : "1px solid transparent",
@@ -679,14 +684,14 @@ export function DashboardView({ entries, onStartAnalysis }: DashboardViewProps) 
                   </div>
 
                   {/* Snippet */}
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 overflow-hidden">
                     <div
                       className="truncate"
                       style={{ color: "var(--nt-text-md)", fontSize: 11, fontFamily: "var(--font-dm-sans)" }}
                     >
                       {entry.inputSnippet || "—"}
                     </div>
-                    <div style={{ color: "var(--nt-text-xs)", fontSize: 9, fontFamily: "var(--font-jetbrains-mono)", marginTop: 1 }}>
+                    <div className="truncate" style={{ color: "var(--nt-text-xs)", fontSize: 9, fontFamily: "var(--font-jetbrains-mono)", marginTop: 1 }}>
                       {shortDate(entry.timestamp)} · {relativeTime(entry.timestamp)}
                     </div>
                   </div>

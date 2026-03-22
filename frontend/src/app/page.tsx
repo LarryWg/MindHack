@@ -102,402 +102,585 @@ function BiomarkersPanel() {
     {
       id: "lexical",
       name: "Lexical Diversity",
-      agent: "Lexical Agent",
+      abbr: "LEX",
+      agent: "Lexical",
       region: "Broca's Area",
-      description: "Measures vocabulary richness and word choice patterns",
-      metrics: ["Type-Token Ratio (TTR)", "Lexical Density", "Filler Word Frequency"],
-      clinical: "Reduced diversity may indicate aphasia or cognitive decline",
+      mni: "[-44, 20, 8]",
+      description: "Vocabulary richness and word-choice variability across an utterance.",
+      metrics: [
+        { label: "TTR", desc: "Type-Token Ratio" },
+        { label: "Density", desc: "Lexical Density" },
+        { label: "Filler Rate", desc: "Filler Words / 100W" },
+      ],
+      clinical: "↓ diversity → aphasia, early dementia",
       color: "#ff6b6b",
     },
     {
       id: "semantic",
       name: "Semantic Coherence",
-      agent: "Semantic Agent",
+      abbr: "SEM",
+      agent: "Semantic",
       region: "Wernicke's Area",
-      description: "Evaluates meaning connectivity and conceptual relationships",
-      metrics: ["Idea Density", "Coherence Score", "Tangentiality Index"],
-      clinical: "Disrupted coherence often seen in schizophrenia or dementia",
+      mni: "[-54, -40, 14]",
+      description: "Meaning connectivity and conceptual continuity across sentences.",
+      metrics: [
+        { label: "Coherence", desc: "Sentence-to-sentence similarity" },
+        { label: "Idea Density", desc: "Propositions per word" },
+        { label: "Tangentiality", desc: "Topic drift index" },
+      ],
+      clinical: "↓ coherence → schizophrenia, dementia",
       color: "#f59e0b",
     },
     {
       id: "syntax",
       name: "Syntactic Complexity",
-      agent: "Syntax Agent",
+      abbr: "SYN",
+      agent: "Syntax",
       region: "DLPFC",
-      description: "Analyzes grammatical structure and sentence organization",
-      metrics: ["Mean Length of Utterance (MLU)", "Clause Density", "Passive Voice Usage"],
-      clinical: "Simplified syntax may indicate cognitive impairment",
+      mni: "[-46, 20, 32]",
+      description: "Grammatical structure depth and sentence organisation patterns.",
+      metrics: [
+        { label: "MLU", desc: "Mean Length of Utterance" },
+        { label: "Clause Depth", desc: "Embedding depth" },
+        { label: "Passive Ratio", desc: "Passive voice usage" },
+      ],
+      clinical: "↓ complexity → cognitive impairment",
       color: "#00e5ff",
     },
     {
       id: "prosody",
       name: "Prosodic Features",
-      agent: "Prosody Agent",
+      abbr: "PRO",
+      agent: "Prosody",
       region: "SMA",
-      description: "Assesses speech rhythm, timing, and intonation patterns",
-      metrics: ["Speech Rate (wpm)", "Pause Frequency", "Hesitation Duration"],
-      clinical: "Abnormal prosody common in Parkinson's and depression",
+      mni: "[0, -4, 60]",
+      description: "Speech rhythm, timing, and intonation dynamics.",
+      metrics: [
+        { label: "WPM", desc: "Words per minute" },
+        { label: "Pause Freq", desc: "Pauses per minute" },
+        { label: "Hesitation", desc: "Filled pause ratio" },
+      ],
+      clinical: "↑ pauses + ↓ WPM → Parkinson's, depression",
       color: "#1d9e75",
     },
     {
       id: "affective",
       name: "Affective Markers",
-      agent: "Affective Agent",
+      abbr: "AFF",
+      agent: "Affective",
       region: "Amygdala",
-      description: "Monitors emotional tone and affective expression patterns",
-      metrics: ["Valence Score", "Arousal Level", "Emotional Intensity"],
-      clinical: "Altered affective markers seen in mood disorders",
+      mni: "[-24, -4, -22]",
+      description: "Emotional tone, arousal intensity, and affective expression.",
+      metrics: [
+        { label: "Valence", desc: "Positive–negative polarity" },
+        { label: "Arousal", desc: "Activation level" },
+        { label: "Certainty", desc: "Confidence markers" },
+      ],
+      clinical: "↓ valence + ↑ arousal → mood disorders",
       color: "#a855f7",
     },
   ];
 
+  const GLASS: React.CSSProperties = {
+    background: "var(--nt-glass)",
+    backdropFilter: "blur(16px)",
+    WebkitBackdropFilter: "blur(16px)",
+    border: "1px solid var(--nt-glass-border)",
+    boxShadow: "var(--nt-glass-shadow)",
+  };
+
   return (
-    <div className="h-full overflow-y-auto p-6">
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-2xl font-semibold mb-2" style={{ color: "var(--nt-text-hi)" }}>
+    <div className="h-full overflow-y-auto" style={{ padding: "16px 18px 24px" }}>
+      {/* Header */}
+      <div className="mb-5">
+        <div className="flex items-baseline gap-3 mb-1">
+          <h1
+            style={{
+              color: "var(--nt-text-hi)",
+              fontSize: 17,
+              fontFamily: "var(--font-syne)",
+              fontWeight: 700,
+              letterSpacing: "-0.02em",
+            }}
+          >
             Cognitive Biomarkers
           </h1>
-          <p className="text-sm" style={{ color: "var(--nt-text-md)" }}>
-            Quantitative measures of cognitive function derived from speech and language analysis.
-            Each biomarker provides insights into specific aspects of neural processing and cognitive health.
-          </p>
+          <span
+            style={{
+              color: "var(--nt-text-ghost)",
+              fontSize: 9,
+              fontFamily: "var(--font-jetbrains-mono)",
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+            }}
+          >
+            5 domains · 15 metrics
+          </span>
         </div>
+        <p style={{ color: "var(--nt-text-xs)", fontSize: 11, fontFamily: "var(--font-dm-sans)", lineHeight: 1.5 }}>
+          Quantitative speech & language markers mapped to specific neural circuits.
+        </p>
+      </div>
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-1">
-          {biomarkers.map((biomarker) => (
+      {/* Biomarker cards — 2 col grid */}
+      <div className="grid gap-2.5" style={{ gridTemplateColumns: "1fr 1fr" }}>
+        {biomarkers.map((bm) => (
+          <div
+            key={bm.id}
+            className="rounded-xl overflow-hidden flex flex-col"
+            style={{ ...GLASS }}
+          >
+            {/* Colour accent strip + header */}
             <div
-              key={biomarker.id}
-              className="rounded-xl p-6"
-              style={{
-                background: "var(--nt-glass)",
-                backdropFilter: "blur(18px)",
-                border: "1px solid var(--nt-glass-border)",
-                boxShadow: "var(--nt-glass-shadow)",
-              }}
+              className="flex items-center gap-3 px-4 py-3"
+              style={{ borderBottom: "1px solid var(--nt-divider)" }}
             >
-              <div className="flex items-start gap-4">
-                <div
-                  className="w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-sm shrink-0"
-                  style={{ backgroundColor: biomarker.color }}
+              <div
+                className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                style={{
+                  background: `${bm.color}18`,
+                  border: `1px solid ${bm.color}35`,
+                }}
+              >
+                <span
+                  style={{
+                    color: bm.color,
+                    fontSize: 9,
+                    fontFamily: "var(--font-jetbrains-mono)",
+                    fontWeight: 700,
+                    letterSpacing: "0.05em",
+                  }}
                 >
-                  {biomarker.id.charAt(0).toUpperCase()}
+                  {bm.abbr}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div
+                  style={{
+                    color: "var(--nt-text-hi)",
+                    fontSize: 12,
+                    fontFamily: "var(--font-syne)",
+                    fontWeight: 600,
+                    lineHeight: 1.2,
+                  }}
+                >
+                  {bm.name}
                 </div>
-
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-lg font-semibold mb-1" style={{ color: "var(--nt-text-hi)" }}>
-                    {biomarker.name}
-                  </h3>
-
-                  <div className="mb-3">
-                    <span
-                      className="inline-block px-2 py-1 rounded-md text-xs font-medium mr-2"
-                      style={{
-                        backgroundColor: `${biomarker.color}20`,
-                        color: biomarker.color,
-                        border: `1px solid ${biomarker.color}30`,
-                      }}
-                    >
-                      {biomarker.agent}
-                    </span>
-                    <span
-                      className="inline-block px-2 py-1 rounded-md text-xs font-medium"
-                      style={{
-                        backgroundColor: "rgba(0,0,0,0.05)",
-                        color: "var(--nt-text-md)",
-                        border: "1px solid rgba(0,0,0,0.1)",
-                      }}
-                    >
-                      {biomarker.region}
-                    </span>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div>
-                      <h4 className="text-sm font-medium mb-1" style={{ color: "var(--nt-text-hi)" }}>
-                        Description
-                      </h4>
-                      <p className="text-sm" style={{ color: "var(--nt-text-md)" }}>
-                        {biomarker.description}
-                      </p>
-                    </div>
-
-                    <div>
-                      <h4 className="text-sm font-medium mb-1" style={{ color: "var(--nt-text-hi)" }}>
-                        Key Metrics
-                      </h4>
-                      <ul className="text-sm space-y-0.5" style={{ color: "var(--nt-text-md)" }}>
-                        {biomarker.metrics.map((metric, index) => (
-                          <li key={index} className="flex items-center gap-2">
-                            <span className="w-1 h-1 rounded-full bg-current opacity-50 shrink-0" />
-                            {metric}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    <div>
-                      <h4 className="text-sm font-medium mb-1" style={{ color: "var(--nt-text-hi)" }}>
-                        Clinical Significance
-                      </h4>
-                      <p className="text-sm" style={{ color: "var(--nt-text-md)" }}>
-                        {biomarker.clinical}
-                      </p>
-                    </div>
-                  </div>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span
+                    className="px-1.5 py-px rounded text-[8px] font-semibold uppercase tracking-wide"
+                    style={{ background: `${bm.color}15`, color: bm.color, fontFamily: "var(--font-jetbrains-mono)" }}
+                  >
+                    {bm.agent}
+                  </span>
+                  <span style={{ color: "var(--nt-text-ghost)", fontSize: 8, fontFamily: "var(--font-jetbrains-mono)" }}>
+                    {bm.region}
+                  </span>
                 </div>
               </div>
             </div>
-          ))}
-        </div>
 
-        <div className="mt-8 grid gap-6 md:grid-cols-2">
-          <div className="p-6 rounded-xl" style={{
-            background: "var(--nt-glass)",
-            backdropFilter: "blur(18px)",
-            border: "1px solid var(--nt-glass-border)",
-            boxShadow: "var(--nt-glass-shadow)",
-          }}>
-            <h2 className="text-lg font-semibold mb-3" style={{ color: "var(--nt-text-hi)" }}>
-              Biomarker Calculation
-            </h2>
-            <div className="space-y-3 text-sm" style={{ color: "var(--nt-text-md)" }}>
-              <p>
-                <strong>Automated Analysis:</strong> Machine learning algorithms process speech
-                and text input to extract quantitative features.
+            {/* Body */}
+            <div className="px-4 py-3 flex flex-col gap-2.5 flex-1">
+              {/* Description */}
+              <p style={{ color: "var(--nt-text-lo)", fontSize: 10.5, fontFamily: "var(--font-dm-sans)", lineHeight: 1.55 }}>
+                {bm.description}
               </p>
-              <p>
-                <strong>Normalization:</strong> Raw metrics are normalized against healthy
-                population baselines for comparative assessment.
-              </p>
-              <p>
-                <strong>Scoring:</strong> Results are scaled 0-100, where higher scores
-                indicate greater deviation from normal patterns.
-              </p>
+
+              {/* Metric chips */}
+              <div className="flex flex-wrap gap-1">
+                {bm.metrics.map((m) => (
+                  <div
+                    key={m.label}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg"
+                    style={{
+                      background: "var(--nt-hover)",
+                      border: "1px solid var(--nt-divider)",
+                    }}
+                    title={m.desc}
+                  >
+                    <div className="w-1 h-1 rounded-full shrink-0" style={{ background: bm.color, opacity: 0.7 }} />
+                    <span style={{ color: "var(--nt-text-lo)", fontSize: 9, fontFamily: "var(--font-jetbrains-mono)" }}>
+                      {m.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Clinical note */}
+              <div
+                className="flex items-start gap-2 px-2.5 py-2 rounded-lg mt-auto"
+                style={{ background: `${bm.color}0a`, border: `1px solid ${bm.color}18` }}
+              >
+                <div className="w-1 h-1 rounded-full mt-1.5 shrink-0" style={{ background: bm.color }} />
+                <span style={{ color: "var(--nt-text-xs)", fontSize: 9.5, fontFamily: "var(--font-dm-sans)", fontStyle: "italic", lineHeight: 1.5 }}>
+                  {bm.clinical}
+                </span>
+              </div>
             </div>
           </div>
+        ))}
+      </div>
 
-          <div className="p-6 rounded-xl" style={{
-            background: "var(--nt-glass)",
-            backdropFilter: "blur(18px)",
-            border: "1px solid var(--nt-glass-border)",
-            boxShadow: "var(--nt-glass-shadow)",
-          }}>
-            <h2 className="text-lg font-semibold mb-3" style={{ color: "var(--nt-text-hi)" }}>
-              Research Applications
-            </h2>
-            <ul className="space-y-2 text-sm" style={{ color: "var(--nt-text-md)" }}>
-              <li className="flex items-start gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-current opacity-50 shrink-0 mt-1.5" />
-                <span>Early detection of neurodegenerative diseases</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-current opacity-50 shrink-0 mt-1.5" />
-                <span>Monitoring treatment response in clinical trials</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-current opacity-50 shrink-0 mt-1.5" />
-                <span>Objective assessment of cognitive rehabilitation</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-current opacity-50 shrink-0 mt-1.5" />
-                <span>Population-level cognitive health screening</span>
-              </li>
-            </ul>
-          </div>
-        </div>
+      {/* Footer note */}
+      <div
+        className="mt-3 px-4 py-3 rounded-xl flex items-center gap-3"
+        style={{ ...GLASS }}
+      >
+        <div className="w-1 self-stretch rounded-full shrink-0" style={{ background: "linear-gradient(to bottom, #3b82f6, #a855f7)" }} />
+        <p style={{ color: "var(--nt-text-xs)", fontSize: 10, fontFamily: "var(--font-dm-sans)", lineHeight: 1.6 }}>
+          All scores normalised 0–1 against healthy-population baselines. Higher scores indicate greater deviation.
+          Biomarkers are extracted via a 7-agent Langflow pipeline using spaCy, sentence-transformers, and Claude claude-sonnet-4-6.
+        </p>
       </div>
     </div>
   );
 }
 
+const REGION_MESH_CONFIG_COLORS: Record<string, string> = {
+  "Broca's area":    "#ff6b6b",
+  "Wernicke's area": "#f59e0b",
+  "DLPFC":           "#00e5ff",
+  "SMA":             "#1d9e75",
+  "Amygdala":        "#a855f7",
+};
+
+const DEFAULT_REGIONS: RegionActivation[] = [
+  { region: "Broca's area",    mni: [-44, 20, 8],    activation: 0.72, agent: "Lexical" },
+  { region: "Wernicke's area", mni: [-54, -40, 14],  activation: 0.58, agent: "Semantic" },
+  { region: "DLPFC",           mni: [-46, 20, 32],   activation: 0.83, agent: "Syntax" },
+  { region: "SMA",             mni: [0, -4, 60],     activation: 0.44, agent: "Prosody" },
+  { region: "Amygdala",        mni: [-24, -4, -22],  activation: 0.31, agent: "Affective" },
+];
+
 function BrainRegionsPanel() {
   const regions = [
     {
-      id: "dlpfc",
-      name: "DLPFC (Dorolateral Prefrontal Cortex)",
-      location: "Frontal Lobe",
-      function: "Executive function, working memory, cognitive control, and decision-making",
-      agent: "Syntax Agent",
-      analysis: "Analyzes grammatical structure, sentence complexity, and language organization patterns",
-      color: "#00e5ff",
-    },
-    {
       id: "broca",
       name: "Broca's Area",
-      location: "Frontal Lobe",
-      function: "Speech production, language processing, and motor planning for articulation",
-      agent: "Lexical Agent",
-      analysis: "Examines vocabulary richness, word choice patterns, and lexical diversity",
-      color: "#ff6b6b",
+      ba: "BA 44/45",
+      location: "Inferior Frontal Gyrus",
+      lobe: "Frontal",
+      mni: "−44, 20, 8",
+      agent: "Lexical",
+      agentColor: "#ff6b6b",
+      function: "Speech production, phonological processing, lexical retrieval.",
+      signal: "↓ activation → expressive aphasia, word-finding difficulty",
+      tracts: ["Arcuate fasciculus", "IFOF"],
     },
     {
       id: "wernicke",
       name: "Wernicke's Area",
-      location: "Temporal Lobe",
-      function: "Language comprehension, semantic processing, and understanding of spoken/written words",
-      agent: "Semantic Agent",
-      analysis: "Evaluates meaning coherence, idea connectivity, and conceptual relationships",
-      color: "#f59e0b",
+      ba: "BA 22",
+      location: "Superior Temporal Gyrus",
+      lobe: "Temporal",
+      mni: "−54, −40, 14",
+      agent: "Semantic",
+      agentColor: "#f59e0b",
+      function: "Language comprehension, semantic decoding, auditory word recognition.",
+      signal: "↓ coherence → fluent but meaningless speech, receptive aphasia",
+      tracts: ["Arcuate fasciculus", "SLF"],
+    },
+    {
+      id: "dlpfc",
+      name: "DLPFC",
+      ba: "BA 9/46",
+      location: "Dorsolateral Prefrontal Cortex",
+      lobe: "Frontal",
+      mni: "−46, 20, 32",
+      agent: "Syntax",
+      agentColor: "#00e5ff",
+      function: "Working memory, cognitive control, syntactic rule application.",
+      signal: "↑ syntactic load → DLPFC hyperdrive; ↓ activity → agrammatism",
+      tracts: ["SLF II", "Cingulum"],
     },
     {
       id: "sma",
-      name: "Supplementary Motor Area",
-      location: "Frontal Lobe",
-      function: "Motor planning, speech rhythm, and coordination of complex movements",
-      agent: "Prosody Agent",
-      analysis: "Assesses speech timing, intonation patterns, and prosodic features",
-      color: "#1d9e75",
+      name: "SMA",
+      ba: "BA 6",
+      location: "Supplementary Motor Area",
+      lobe: "Frontal",
+      mni: "0, −4, 60",
+      agent: "Prosody",
+      agentColor: "#1d9e75",
+      function: "Speech motor planning, prosodic timing, pause & rhythm control.",
+      signal: "↓ speech rate + ↑ hesitation → SMA hypofunction, Parkinson's",
+      tracts: ["Corticospinal", "SMA–Broca loop"],
     },
     {
       id: "amygdala",
       name: "Amygdala",
-      location: "Temporal Lobe",
-      function: "Emotional processing, fear response, and affective state regulation",
-      agent: "Affective Agent",
-      analysis: "Monitors emotional tone, affective markers, and emotional expression patterns",
-      color: "#a855f7",
+      ba: "—",
+      location: "Medial Temporal Lobe",
+      lobe: "Limbic",
+      mni: "−24, −4, −22",
+      agent: "Affective",
+      agentColor: "#a855f7",
+      function: "Emotional salience, fear conditioning, affective language valence.",
+      signal: "↑ arousal + ↓ valence → mood disorder, anxiety fingerprint",
+      tracts: ["Uncinate fasciculus", "Amygdalofugal"],
     },
   ];
 
-  return (
-    <div className="h-full overflow-y-auto p-6">
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-2xl font-semibold mb-2" style={{ color: "var(--nt-text-hi)" }}>
-            Brain Regions & Cognitive Analysis
-          </h1>
-          <p className="text-sm" style={{ color: "var(--nt-text-md)" }}>
-            Explore the neural foundations of language and cognition. Each brain region plays a specialized role
-            in processing different aspects of communication and thought.
-          </p>
-        </div>
+  const GLASS: React.CSSProperties = {
+    background: "var(--nt-glass)",
+    backdropFilter: "blur(16px)",
+    WebkitBackdropFilter: "blur(16px)",
+    border: "1px solid var(--nt-glass-border)",
+    boxShadow: "var(--nt-glass-shadow)",
+  };
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-1">
-          {regions.map((region) => (
+  const [hoveredAtlasRegion, setHoveredAtlasRegion] = useState<RegionActivation | null>(null);
+
+  return (
+    <div className="h-full overflow-y-auto" style={{ padding: "16px 18px 24px" }}>
+      {/* Header */}
+      <div className="mb-4">
+        <div className="flex items-baseline gap-3 mb-1">
+          <h1
+            style={{
+              color: "var(--nt-text-hi)",
+              fontSize: 17,
+              fontFamily: "var(--font-syne)",
+              fontWeight: 700,
+              letterSpacing: "-0.02em",
+            }}
+          >
+            Brain Regions
+          </h1>
+          <span
+            style={{
+              color: "var(--nt-text-ghost)",
+              fontSize: 9,
+              fontFamily: "var(--font-jetbrains-mono)",
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+            }}
+          >
+            MNI152 · 5 regions
+          </span>
+        </div>
+        <p style={{ color: "var(--nt-text-xs)", fontSize: 11, fontFamily: "var(--font-dm-sans)", lineHeight: 1.5 }}>
+          Neural circuits that drive language and cognition, each mapped to a NeuroTrace analysis agent.
+        </p>
+      </div>
+
+      {/* 3D brain — same viewer as the analysis page */}
+      <div
+        className="rounded-xl mb-3 overflow-hidden relative"
+        style={{ ...GLASS, height: 280 }}
+      >
+        <BrainViewer
+          activations={DEFAULT_REGIONS}
+          onRegionClick={(r) => setHoveredAtlasRegion(r)}
+          showLabels
+        />
+        {/* Hint overlay */}
+        <div
+          className="absolute bottom-2 left-0 right-0 flex justify-center pointer-events-none"
+        >
+          <span
+            className="px-2 py-1 rounded-lg"
+            style={{
+              background: "rgba(0,0,0,0.45)",
+              color: "rgba(255,255,255,0.45)",
+              fontSize: 9,
+              fontFamily: "var(--font-jetbrains-mono)",
+              letterSpacing: "0.06em",
+            }}
+          >
+            hover to explore · drag to rotate
+          </span>
+        </div>
+      </div>
+
+      {/* Hovered region callout */}
+      {hoveredAtlasRegion && (
+        <div
+          className="rounded-xl px-4 py-3 mb-3 flex items-center gap-3"
+          style={{ ...GLASS, borderColor: "rgba(216,90,48,0.3)" }}
+        >
+          <div
+            className="w-2 h-2 rounded-full shrink-0"
+            style={{ background: REGION_MESH_CONFIG_COLORS[hoveredAtlasRegion.region] ?? "#888" }}
+          />
+          <div className="flex-1 min-w-0">
+            <span style={{ color: "var(--nt-text-hi)", fontSize: 12, fontFamily: "var(--font-syne)", fontWeight: 600 }}>
+              {hoveredAtlasRegion.region}
+            </span>
+            <span style={{ color: "var(--nt-text-ghost)", fontSize: 9, fontFamily: "var(--font-jetbrains-mono)", marginLeft: 8 }}>
+              MNI [{hoveredAtlasRegion.mni.join(", ")}]
+            </span>
+          </div>
+          <span style={{ color: "var(--nt-text-xs)", fontSize: 10, fontFamily: "var(--font-dm-sans)" }}>
+            {hoveredAtlasRegion.agent} agent
+          </span>
+        </div>
+      )}
+
+      {/* Region rows */}
+      <div className="flex flex-col gap-2">
+        {regions.map((r) => (
+          <div
+            key={r.id}
+            className="rounded-xl overflow-hidden flex"
+            style={{ ...GLASS }}
+          >
+            {/* Left accent bar */}
             <div
-              key={region.id}
-              className="rounded-xl p-6"
-              style={{
-                background: "var(--nt-glass)",
-                backdropFilter: "blur(18px)",
-                border: "1px solid var(--nt-glass-border)",
-                boxShadow: "var(--nt-glass-shadow)",
-              }}
-            >
-              <div className="flex flex-col gap-6">
-                {/* Brain Region Diagram */}
-                <div className="flex justify-center">
-                  <div
-                    className="w-64 h-48 rounded-lg overflow-hidden border-2"
-                    style={{ borderColor: region.color }}
+              className="w-1 shrink-0"
+              style={{ background: r.agentColor }}
+            />
+
+            {/* Content */}
+            <div className="flex-1 min-w-0 px-4 py-3 grid gap-x-6" style={{ gridTemplateColumns: "1fr 1.4fr" }}>
+              {/* Left col: identity */}
+              <div className="flex flex-col gap-1.5 justify-center">
+                <div className="flex items-center gap-2">
+                  <span
+                    style={{
+                      color: "var(--nt-text-hi)",
+                      fontSize: 13,
+                      fontFamily: "var(--font-syne)",
+                      fontWeight: 700,
+                    }}
                   >
-                    <img
-                      src={`/images/${region.id}.png`}
-                      alt={`${region.name} diagram`}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        // Fallback to colored placeholder if image fails to load
-                        const target = e.target as HTMLImageElement;
-                        target.style.display = 'none';
-                        const parent = target.parentElement;
-                        if (parent) {
-                          parent.innerHTML = `
-                            <div class="w-full h-full flex flex-col items-center justify-center text-white font-semibold" style="background: linear-gradient(135deg, ${region.color}80, ${region.color}40)">
-                              <div class="text-2xl mb-2">${region.id.toUpperCase()}</div>
-                              <div class="text-sm opacity-80">Brain Diagram</div>
-                            </div>
-                          `;
-                        }
-                      }}
-                    />
-                  </div>
+                    {r.name}
+                  </span>
+                  <span
+                    className="px-1.5 py-px rounded text-[8px] font-mono"
+                    style={{ background: "var(--nt-hover)", color: "var(--nt-text-ghost)", border: "1px solid var(--nt-divider)" }}
+                  >
+                    {r.ba}
+                  </span>
                 </div>
 
-                {/* Region Information */}
-                <div>
-                  <div className="flex items-center gap-3 mb-3">
-                    <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold text-xs shrink-0"
-                      style={{ backgroundColor: region.color }}
-                    >
-                      {region.id.toUpperCase()}
-                    </div>
-                    <h3 className="text-lg font-semibold" style={{ color: "var(--nt-text-hi)" }}>
-                      {region.name}
-                    </h3>
-                  </div>
+                <div style={{ color: "var(--nt-text-xs)", fontSize: 10, fontFamily: "var(--font-dm-sans)" }}>
+                  {r.location} · {r.lobe} Lobe
+                </div>
 
-                  <div className="mb-3">
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span
+                    className="px-2 py-0.5 rounded text-[8px] font-semibold uppercase tracking-wide"
+                    style={{
+                      background: `${r.agentColor}15`,
+                      color: r.agentColor,
+                      border: `1px solid ${r.agentColor}30`,
+                      fontFamily: "var(--font-jetbrains-mono)",
+                    }}
+                  >
+                    {r.agent} agent
+                  </span>
+                  <span
+                    style={{
+                      color: "var(--nt-text-ghost)",
+                      fontSize: 8,
+                      fontFamily: "var(--font-jetbrains-mono)",
+                    }}
+                  >
+                    MNI [{r.mni}]
+                  </span>
+                </div>
+
+                {/* Tracts */}
+                <div className="flex flex-wrap gap-1 mt-0.5">
+                  {r.tracts.map((t) => (
                     <span
-                      className="inline-block px-2 py-1 rounded-md text-xs font-medium"
+                      key={t}
+                      className="px-1.5 py-px rounded text-[7.5px]"
                       style={{
-                        backgroundColor: `${region.color}20`,
-                        color: region.color,
-                        border: `1px solid ${region.color}30`,
+                        background: "var(--nt-hover)",
+                        color: "var(--nt-text-ghost)",
+                        border: "1px solid var(--nt-divider)",
+                        fontFamily: "var(--font-jetbrains-mono)",
                       }}
                     >
-                      {region.location}
+                      {t}
                     </span>
-                  </div>
+                  ))}
+                </div>
+              </div>
 
-                  <div className="space-y-3">
-                    <div>
-                      <h4 className="text-sm font-medium mb-1" style={{ color: "var(--nt-text-hi)" }}>
-                        Neural Function
-                      </h4>
-                      <p className="text-sm" style={{ color: "var(--nt-text-md)" }}>
-                        {region.function}
-                      </p>
-                    </div>
-
-                    <div>
-                      <h4 className="text-sm font-medium mb-1" style={{ color: "var(--nt-text-hi)" }}>
-                        Cognitive Agent
-                      </h4>
-                      <p className="text-sm" style={{ color: "var(--nt-text-md)" }}>
-                        <span style={{ color: region.color, fontWeight: 500 }}>{region.agent}</span> - {region.analysis}
-                      </p>
-                    </div>
-                  </div>
+              {/* Right col: function + signal */}
+              <div className="flex flex-col gap-2 justify-center" style={{ borderLeft: "1px solid var(--nt-divider)", paddingLeft: 16 }}>
+                <p style={{ color: "var(--nt-text-lo)", fontSize: 11, fontFamily: "var(--font-dm-sans)", lineHeight: 1.55 }}>
+                  {r.function}
+                </p>
+                <div
+                  className="flex items-start gap-2 px-2.5 py-2 rounded-lg"
+                  style={{ background: `${r.agentColor}0a`, border: `1px solid ${r.agentColor}18` }}
+                >
+                  <div className="w-1 h-1 rounded-full mt-1.5 shrink-0" style={{ background: r.agentColor }} />
+                  <span
+                    style={{
+                      color: "var(--nt-text-xs)",
+                      fontSize: 9.5,
+                      fontFamily: "var(--font-dm-sans)",
+                      fontStyle: "italic",
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {r.signal}
+                  </span>
                 </div>
               </div>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
+      </div>
 
-        <div className="mt-8 p-6 rounded-xl" style={{
-          background: "var(--nt-glass)",
-          backdropFilter: "blur(18px)",
-          border: "1px solid var(--nt-glass-border)",
-          boxShadow: "var(--nt-glass-shadow)",
-        }}>
-          <h2 className="text-lg font-semibold mb-3" style={{ color: "var(--nt-text-hi)" }}>
-            How It Works
-          </h2>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <h3 className="text-sm font-medium mb-2" style={{ color: "var(--nt-text-hi)" }}>
-                Neural Analysis Pipeline
-              </h3>
-              <ul className="text-sm space-y-1" style={{ color: "var(--nt-text-md)" }}>
-                <li>• Speech/text input processing</li>
-                <li>• Feature extraction from multiple modalities</li>
-                <li>• Region-specific biomarker calculation</li>
-                <li>• Cognitive signature generation</li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="text-sm font-medium mb-2" style={{ color: "var(--nt-text-hi)" }}>
-                Clinical Applications
-              </h3>
-              <ul className="text-sm space-y-1" style={{ color: "var(--nt-text-md)" }}>
-                <li>• Early detection of cognitive decline</li>
-                <li>• Language disorder assessment</li>
-                <li>• Treatment progress monitoring</li>
-                <li>• Research biomarker validation</li>
-              </ul>
-            </div>
+      {/* Pipeline note */}
+      <div
+        className="mt-3 rounded-xl px-4 py-3 grid gap-4"
+        style={{ ...GLASS, gridTemplateColumns: "1fr 1fr" }}
+      >
+        <div>
+          <div
+            style={{
+              color: "var(--nt-text-xs)",
+              fontSize: 8.5,
+              fontFamily: "var(--font-jetbrains-mono)",
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              marginBottom: 6,
+            }}
+          >
+            Analysis Pipeline
+          </div>
+          <div className="flex flex-col gap-1">
+            {["Speech/text → Whisper STT", "spaCy + sentence-transformers", "7-agent Langflow pipeline", "MNI152 activation overlay"].map((step, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <div
+                  className="w-4 h-4 rounded flex items-center justify-center shrink-0"
+                  style={{ background: "var(--nt-hover)", border: "1px solid var(--nt-divider)" }}
+                >
+                  <span style={{ color: "var(--nt-text-ghost)", fontSize: 7, fontFamily: "var(--font-jetbrains-mono)" }}>{i + 1}</span>
+                </div>
+                <span style={{ color: "var(--nt-text-lo)", fontSize: 10, fontFamily: "var(--font-dm-sans)" }}>{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div
+            style={{
+              color: "var(--nt-text-xs)",
+              fontSize: 8.5,
+              fontFamily: "var(--font-jetbrains-mono)",
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              marginBottom: 6,
+            }}
+          >
+            Clinical Applications
+          </div>
+          <div className="flex flex-col gap-1">
+            {["Early dementia & MCI detection", "ADHD & language disorder screening", "Depression vocal biomarkers", "Treatment response monitoring"].map((app, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <div className="w-1 h-1 rounded-full shrink-0" style={{ background: "var(--nt-text-ghost)" }} />
+                <span style={{ color: "var(--nt-text-lo)", fontSize: 10, fontFamily: "var(--font-dm-sans)" }}>{app}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
