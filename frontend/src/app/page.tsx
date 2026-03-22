@@ -131,7 +131,6 @@ export default function DashboardPage() {
   const [audioDuration, setAudioDuration] = useState<number | undefined>();
   const [activePage, setActivePage] = useState("analysis");
   const [cognitiveReport, setCognitiveReport] = useState<CognitiveReport | undefined>();
-  const [useLangFlowTest, setUseLangFlowTest] = useState(false);
   const [currentAgentIndex, setCurrentAgentIndex] = useState(0);
 
   const nextAgent = useCallback(() => {
@@ -246,46 +245,6 @@ export default function DashboardPage() {
     }
   }, [sessionId]);
 
-  const handleLangFlowTest = useCallback(async (input: AnalysisInput) => {
-    if (input.type === "file") {
-      console.error("LangFlow test doesn't support file inputs");
-      return;
-    }
-
-    setHasStarted(true);
-    setIsLoading(true);
-    setCognitiveReport(undefined);
-
-    try {
-      const body = { input_value: input.content };
-      const res = await fetch("http://localhost:8000/langflow-test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        console.error("LangFlow test failed:", await res.text());
-        return;
-      }
-      const data = await res.json();
-      if (data.report) setCognitiveReport(data.report as CognitiveReport);
-      if (data.scores) {
-        console.log("[NeuroTrace] raw langflow test scores:", data.scores);
-        const raw = data.scores as Record<string, number | { overall: number }>;
-        const scores: Record<string, number> = {};
-        for (const [key, val] of Object.entries(raw)) {
-          scores[key] = typeof val === "number" ? val : val.overall;
-        }
-        setBiomarkerScores(scores);
-        setActivations(BRAIN_REGIONS.map((r) => ({ ...r, activation: scores[AGENT_KEY[r.agent]] ?? r.activation })));
-      }
-    } catch (error) {
-      console.error("LangFlow test error:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
   // ── Shared glass style ──────────────────────────────────────────────────────
   const glassStyle: React.CSSProperties = {
     background: "rgba(252, 251, 249, 0.68)",
@@ -376,9 +335,6 @@ export default function DashboardPage() {
               </div>
               <AnalysisPanel
                 onSubmit={handleSubmit}
-                onLangFlowTest={handleLangFlowTest}
-                useLangFlowTest={useLangFlowTest}
-                onToggleLangFlowTest={() => setUseLangFlowTest(!useLangFlowTest)}
                 isLoading={isLoading}
                 agentSteps={[]}
                 placeholder="Paste text or record speech to begin analysis…"
@@ -571,9 +527,6 @@ export default function DashboardPage() {
                 <div className="shrink-0">
                   <AnalysisPanel
                     onSubmit={handleSubmit}
-                    onLangFlowTest={handleLangFlowTest}
-                    useLangFlowTest={useLangFlowTest}
-                    onToggleLangFlowTest={() => setUseLangFlowTest(!useLangFlowTest)}
                     isLoading={isLoading}
                     agentSteps={agentSteps}
                     placeholder="Ask about this cognitive signature…"
