@@ -42,10 +42,34 @@ def _langflow_headers() -> dict:
     return h
 
 
-def _extract_text_and_scores(data: dict) -> tuple[str, Optional[dict]]:
-    """Pull message text and optional BiomarkerScores out of a Langflow response."""
+# Maps brain region name fragments → BiomarkerScores agent key
+_REGION_TO_AGENT: dict[str, str] = {
+    "broca":    "lexical",
+    "wernicke": "semantic",
+    "sma":      "prosody",
+    "dlpfc":    "syntax",
+    "amygdala": "affective",
+}
+
+
+def _strip_markdown_fences(text: str) -> str:
+    """Remove ```json ... ``` or ``` ... ``` fences from a string."""
+    t = text.strip()
+    if not t.startswith("```"):
+        return t
+    lines = t.split("\n")
+    if lines[0].startswith("```"):
+        lines = lines[1:]
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines)
+
+
+def _extract_text_and_scores(data: dict) -> tuple[str, Optional[dict], Optional[dict]]:
+    """Pull message text, BiomarkerScores, and full report out of a Langflow response."""
     message_text = ""
     scores = None
+    report = None
     try:
         outputs = data.get("outputs", [])
         if outputs:
@@ -58,14 +82,26 @@ def _extract_text_and_scores(data: dict) -> tuple[str, Optional[dict]]:
                 else:
                     message_text = str(msg)
 
-                # Scores may be embedded as JSON in the message text
-                if not scores and message_text:
+                # Try to parse JSON embedded in the message text
+                if message_text:
                     try:
-                        parsed = json.loads(message_text)
-                        if isinstance(parsed, dict) and any(
-                            k in parsed for k in ("lexical", "semantic", "prosody", "syntax", "affective")
-                        ):
-                            scores = parsed
+                        parsed = json.loads(_strip_markdown_fences(message_text))
+                        if isinstance(parsed, dict):
+                            if "report" in parsed:
+                                report = parsed["report"]
+                                # Synthesise BiomarkerScores from highlight activations
+                                highlights = report.get("highlights", [])
+                                synth: dict[str, float] = {}
+                                for h in highlights:
+                                    rname = h.get("region", "").lower()
+                                    for fragment, agent_key in _REGION_TO_AGENT.items():
+                                        if fragment in rname:
+                                            synth[agent_key] = float(h.get("activation", 0.0))
+                                            break
+                                if synth:
+                                    scores = synth
+                            elif any(k in parsed for k in ("lexical", "semantic", "prosody", "syntax", "affective")):
+                                scores = parsed
                     except (json.JSONDecodeError, ValueError):
                         pass
 
@@ -75,7 +111,7 @@ def _extract_text_and_scores(data: dict) -> tuple[str, Optional[dict]]:
                     scores = artifacts["scores"]
     except Exception:
         pass
-    return message_text, scores
+    return message_text, scores, report
 
 
 # ── Request models ────────────────────────────────────────────────────────────
@@ -165,13 +201,14 @@ async def analyze(req: AnalyzeRequest):
         for step in AGENT_STEPS:
             yield json.dumps({"type": "step", "step": {"name": step, "status": "done"}}).encode() + b"\n"
 
-        message_text, scores = _extract_text_and_scores(data)
+        message_text, scores, report = _extract_text_and_scores(data)
         session_id = data.get("session_id") or req.session_id or str(uuid.uuid4())
 
         yield json.dumps({
             "type": "end",
             "message": message_text,
             "scores": scores,
+            "report": report,
             "session_id": session_id,
         }).encode() + b"\n"
 
@@ -209,10 +246,11 @@ async def langflow_test(req: LangFlowRequest):
             resp = await client.post(_langflow_url(), json=payload, headers=_langflow_headers())
             resp.raise_for_status()
             data = resp.json()
-            message_text, scores = _extract_text_and_scores(data)
+            message_text, scores, report = _extract_text_and_scores(data)
             return {
                 "response": message_text,
                 "scores": scores,
+                "report": report,
                 "raw": data,
             }
     except httpx.HTTPStatusError as e:

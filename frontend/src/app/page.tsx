@@ -8,6 +8,7 @@ import { SiteHeader } from "@/components/site-header";
 import { MOCK_AGENTS, type AgentCardProps } from "@/components/agent-card";
 import { AnalysisPanel, type AnalysisInput, type WordTimestamp } from "@/components/analysis-panel";
 import { WaveformPanel } from "@/components/waveform-panel";
+import { ReportPanel, type CognitiveReport } from "@/components/report-panel";
 import GlassSurface from "@/components/GlassSurface";
 import type { RegionActivation } from "@/components/brain-viewer";
 
@@ -127,8 +128,8 @@ export default function DashboardPage() {
   const [wordTimestamps, setWordTimestamps] = useState<WordTimestamp[] | undefined>();
   const [audioDuration, setAudioDuration] = useState<number | undefined>();
   const [activePage, setActivePage] = useState("analysis");
+  const [cognitiveReport, setCognitiveReport] = useState<CognitiveReport | undefined>();
   const [useLangFlowTest, setUseLangFlowTest] = useState(false);
-  const [langFlowResponse, setLangFlowResponse] = useState<string | null>(null);
 
   const activeAgentName = useMemo(() => {
     const running = agentSteps.find((s) => s.status === "running");
@@ -147,6 +148,7 @@ export default function DashboardPage() {
     setHasStarted(true);
     setIsLoading(true);
     setBiomarkerScores(undefined);
+    setCognitiveReport(undefined);
     setActivations(BRAIN_REGIONS);
 
     // Capture word timestamps from voice recording
@@ -198,6 +200,7 @@ export default function DashboardPage() {
             setAgentSteps((prev) => prev.map((s) => s.name === ev.step.name ? { ...s, status: ev.step.status, detail: ev.step.detail } : s));
           } else if (ev.type === "end") {
             if (ev.session_id) setSessionId(ev.session_id);
+            if (ev.report) setCognitiveReport(ev.report as CognitiveReport);
             if (ev.scores) {
               const scores = ev.scores as Record<string, number>;
               setBiomarkerScores(scores);
@@ -234,7 +237,7 @@ export default function DashboardPage() {
 
     setHasStarted(true);
     setIsLoading(true);
-    setLangFlowResponse(null);
+    setCognitiveReport(undefined);
 
     try {
       const body = { input_value: input.content };
@@ -244,17 +247,18 @@ export default function DashboardPage() {
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        const errorText = await res.text();
-        console.error("LangFlow test failed:", errorText);
-        setLangFlowResponse(`Error: ${errorText}`);
+        console.error("LangFlow test failed:", await res.text());
         return;
       }
       const data = await res.json();
-      console.log("LangFlow response:", data);
-      setLangFlowResponse(JSON.stringify(data, null, 2));
+      if (data.report) setCognitiveReport(data.report as CognitiveReport);
+      if (data.scores) {
+        const scores = data.scores as Record<string, number>;
+        setBiomarkerScores(scores);
+        setActivations(BRAIN_REGIONS.map((r) => ({ ...r, activation: scores[AGENT_KEY[r.agent]] ?? r.activation })));
+      }
     } catch (error) {
       console.error("LangFlow test error:", error);
-      setLangFlowResponse(`Error: ${error}`);
     } finally {
       setIsLoading(false);
     }
@@ -301,6 +305,7 @@ export default function DashboardPage() {
               setHasStarted(false);
               setAgentSteps([]);
               setBiomarkerScores(undefined);
+              setCognitiveReport(undefined);
               setActivations(BRAIN_REGIONS);
               setWordTimestamps(undefined);
               setAudioDuration(undefined);
@@ -472,8 +477,15 @@ export default function DashboardPage() {
                   <WaveformPanel wordTimestamps={wordTimestamps} duration={audioDuration} />
                 )}
 
-                {/* Spacer when no waveform */}
-                {(!wordTimestamps || wordTimestamps.length === 0) && <div className="flex-1" />}
+                {/* Cognitive report */}
+                {cognitiveReport && (
+                  <div className="flex-1 min-h-0 overflow-y-auto">
+                    <ReportPanel report={cognitiveReport} />
+                  </div>
+                )}
+
+                {/* Spacer when no report */}
+                {!cognitiveReport && (!wordTimestamps || wordTimestamps.length === 0) && <div className="flex-1" />}
 
                 {/* Analysis input */}
                 <div className="shrink-0">
