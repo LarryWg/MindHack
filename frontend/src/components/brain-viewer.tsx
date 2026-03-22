@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
+import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 
 // ─── Types & constants ────────────────────────────────────────────────
 
@@ -25,18 +28,32 @@ type BrainViewerProps = {
   activeAgentName?: string;
 };
 
-// ─── MNI ↔ Voxel helpers ─────────────────────────────────────────────
+// ─── Region mesh config (maps region name → OBJ file + color) ────────
 
-/** MNI152 1mm isotropic: origin at voxel [90, 126, 72] */
-function mniToVoxel(mni: [number, number, number]): [number, number, number] {
-  return [
-    Math.round(90 - mni[0]),
-    Math.round(126 + mni[1]),
-    Math.round(72 + mni[2]),
-  ];
-}
+const REGION_MESH_CONFIG: Record<string, { file: string; color: string }> = {
+  "Broca's area":    { file: "/region_broca.obj",    color: "#D85A30" },
+  "Wernicke's area": { file: "/region_wernicke.obj",  color: "#EF9F27" },
+  "DLPFC":           { file: "/region_dlpfc.obj",     color: "#1D9E75" },
+  "SMA":             { file: "/region_sma.obj",       color: "#EF9F27" },
+  "Amygdala":        { file: "/region_amygdala.obj",  color: "#B4B2A9" },
+};
 
-// ─── SVG fallback ─────────────────────────────────────────────────────
+// ─── Science descriptions ─────────────────────────────────────────────
+
+const REGION_DESCRIPTIONS: Record<string, string> = {
+  "Broca's area":
+    "Primary language production center (BA44/45). Damage causes expressive aphasia. Activated during phonological processing, lexical retrieval difficulty, and speech production planning.",
+  "Wernicke's area":
+    "Language comprehension hub (BA22). Damage causes fluent but meaningless speech. Activated by semantic processing, coherence maintenance, and auditory word recognition.",
+  DLPFC:
+    "Dorsolateral prefrontal cortex (BA9/46). Executive control center for working memory. Activated by complex syntactic structures requiring high cognitive load and rule-based processing.",
+  SMA:
+    "Supplementary motor area (BA6). Speech motor planning and timing center. Activated by prosodic regulation, speech rate control, pause management, and motor sequencing.",
+  Amygdala:
+    "Deep temporal emotional salience detector. Activated by affective language processing, arousal modulation, and certainty/uncertainty expression in speech.",
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────
 
 function activationColor(a: number): string {
   if (a > 0.75) return "#D85A30";
@@ -45,233 +62,394 @@ function activationColor(a: number): string {
   return "#B4B2A9";
 }
 
-/** Project MNI coords to SVG lateral view (viewBox 0 0 400 320) */
-const project = (mni: [number, number, number]): [number, number] => [
-  ((mni[0] + 80) / 160) * 280 + 60,
-  280 - ((mni[2] + 50) / 130) * 220,
-];
+// ─── Info panel overlay (bottom-left) ─────────────────────────────────
 
-function SvgFallback({
-  activations,
-  onRegionClick,
+function RegionInfoPanel({
+  region,
+  onClose,
 }: {
-  activations: RegionActivation[];
-  onRegionClick?: (r: RegionActivation) => void;
+  region: RegionActivation;
+  onClose: () => void;
 }) {
+  const color = activationColor(region.activation);
+
   return (
-    <div className="relative w-full h-full flex items-center justify-center bg-white/50 rounded-xl">
-      <svg viewBox="0 0 400 320" className="w-full h-full max-w-[400px] max-h-[320px]">
-        {/* Brain silhouette — lateral view outline */}
-        <g opacity="0.12">
-          <ellipse cx="200" cy="160" rx="155" ry="130" fill="none" stroke="#000" strokeWidth="1.5" />
-          <path d="M 80 160 Q 60 80 150 50 Q 200 35 240 55" fill="none" stroke="#000" strokeWidth="1" />
-          <path d="M 240 55 Q 330 60 350 130 Q 360 180 330 230" fill="none" stroke="#000" strokeWidth="1" />
-          <path d="M 80 160 Q 70 200 90 240 Q 120 270 170 265" fill="none" stroke="#000" strokeWidth="1" />
-          <path d="M 185 48 Q 220 100 210 180" fill="none" stroke="#000" strokeWidth="0.8" strokeDasharray="3 3" />
-          <path d="M 95 155 Q 160 140 230 150 Q 270 155 300 170" fill="none" stroke="#000" strokeWidth="0.8" strokeDasharray="3 3" />
-          <path d="M 330 230 Q 310 270 270 275 Q 220 280 170 265" fill="none" stroke="#000" strokeWidth="1" />
-          <ellipse cx="285" cy="265" rx="55" ry="30" fill="none" stroke="#000" strokeWidth="0.8" opacity="0.5" />
-          <path d="M 200 275 Q 205 295 210 310" fill="none" stroke="#000" strokeWidth="1.5" />
-        </g>
+    <div
+      className="absolute bottom-4 left-4 z-20 w-72 rounded-xl p-4"
+      style={{
+        background: "rgba(252, 251, 249, 0.82)",
+        backdropFilter: "blur(20px)",
+        border: "1px solid rgba(255,255,255,0.62)",
+        boxShadow: "0 4px 24px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.8)",
+      }}
+    >
+      <button
+        onClick={onClose}
+        className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-full text-black/30 hover:text-black/60 hover:bg-black/5 transition-colors"
+        style={{ fontSize: 14 }}
+      >
+        &times;
+      </button>
 
-        {/* Region activation circles */}
-        {activations.map((r) => {
-          const [x, y] = project(r.mni);
-          const color = activationColor(r.activation);
-          const radius = 10 + r.activation * 14;
-          return (
-            <g key={r.region} onClick={() => onRegionClick?.(r)} style={{ cursor: "pointer" }}>
-              <circle cx={x} cy={y} r={radius + 4} fill="none" stroke={color} strokeWidth="1" opacity={0.25}>
-                <animate attributeName="r" values={`${radius + 2};${radius + 10};${radius + 2}`} dur="2.5s" repeatCount="indefinite" />
-                <animate attributeName="opacity" values="0.3;0;0.3" dur="2.5s" repeatCount="indefinite" />
-              </circle>
-              <circle cx={x} cy={y} r={radius} fill={color} opacity={0.75} />
-              <text x={x} y={y - radius - 6} textAnchor="middle" fontSize="9" fill="#000" opacity={0.45} fontFamily="sans-serif">
-                {r.region}
-              </text>
-              <text x={x} y={y + 3.5} textAnchor="middle" fontSize="9" fill="#fff" fontFamily="sans-serif" fontWeight="600" opacity={0.9}>
-                {Math.round(r.activation * 100)}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
+      <h3 className="text-sm font-semibold text-black/85 mb-1 pr-6">{region.region}</h3>
 
-      <div className="absolute bottom-3 right-3 px-2 py-1 rounded bg-black/5 text-[10px] text-black/30 font-medium">
-        SVG fallback · WebGL unavailable
+      <div
+        className="inline-block text-[9px] tracking-widest uppercase font-semibold px-1.5 py-0.5 rounded mb-2"
+        style={{ background: `${color}18`, color, fontFamily: "var(--font-jetbrains-mono)" }}
+      >
+        {region.agent} agent
       </div>
+
+      <div className="flex items-center gap-2 mb-2">
+        <div className="flex-1 h-1.5 rounded-full bg-black/8 overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-500"
+            style={{ width: `${region.activation * 100}%`, background: color }}
+          />
+        </div>
+        <span
+          className="text-sm font-bold tabular-nums"
+          style={{ color, fontFamily: "var(--font-jetbrains-mono)" }}
+        >
+          {Math.round(region.activation * 100)}%
+        </span>
+      </div>
+
+      <div
+        className="text-[10px] text-black/40 mb-2"
+        style={{ fontFamily: "var(--font-jetbrains-mono)" }}
+      >
+        MNI [{region.mni.join(", ")}]
+      </div>
+
+      <p className="text-[11px] leading-relaxed text-black/55">
+        {REGION_DESCRIPTIONS[region.region] ?? "No description available."}
+      </p>
     </div>
   );
 }
 
-// ─── Overlay generation ───────────────────────────────────────────────
-
-type NiivueInstance = {
-  attachToCanvas: (canvas: HTMLCanvasElement) => void;
-  loadVolumes: (list: Array<{ url: string }>) => Promise<unknown>;
-  setSliceType: (st: number) => unknown;
-  volumes: Array<{
-    hdr: { dims: number[]; pixDims: number[] } | null;
-    img?: Float32Array | Uint8Array | Int16Array | Float64Array | Uint16Array | Int32Array | Uint32Array;
-    clone: () => NiivueVolume;
-  }>;
-  removeVolumeByIndex: (idx: number) => void;
-  addVolume: (vol: NiivueVolume) => void;
-  updateGLVolume: () => void;
-  scene: { crosshairPos: [number, number, number] };
-  frac2mm: (frac: [number, number, number]) => [number, number, number, number];
-};
-
-type NiivueVolume = {
-  hdr: { dims: number[]; pixDims: number[] } | null;
-  img?: Float32Array | Uint8Array | Int16Array | Float64Array | Uint16Array | Int32Array | Uint32Array;
-  colormap: string;
-  opacity: number;
-  cal_min: number;
-  cal_max: number;
-  clone: () => NiivueVolume;
-};
-
-function updateOverlay(nv: NiivueInstance, activations: RegionActivation[]) {
-  const baseVol = nv.volumes[0];
-  if (!baseVol?.hdr) return;
-
-  const { dims, pixDims } = baseVol.hdr;
-  const [nx, ny, nz] = [dims[1], dims[2], dims[3]];
-  const data = new Float32Array(nx * ny * nz).fill(0);
-
-  for (const r of activations) {
-    const [vx, vy, vz] = mniToVoxel(r.mni);
-    const sigVox = 8 / pixDims[1]; // 8mm Gaussian blob
-    for (let x = Math.max(0, vx - 15); x < Math.min(nx, vx + 15); x++)
-      for (let y = Math.max(0, vy - 15); y < Math.min(ny, vy + 15); y++)
-        for (let z = Math.max(0, vz - 15); z < Math.min(nz, vz + 15); z++) {
-          const d2 = ((x - vx) ** 2 + (y - vy) ** 2 + (z - vz) ** 2) / (sigVox ** 2);
-          const val = r.activation * Math.exp(-d2 / 2);
-          const idx = x + y * nx + z * nx * ny;
-          if (val > data[idx]) data[idx] = val; // max blend
-        }
-  }
-
-  // Remove existing overlay
-  if (nv.volumes.length > 1) {
-    nv.removeVolumeByIndex(1);
-  }
-
-  // Create overlay volume by cloning the base, zeroing it, then filling with our data
-  const overlay = baseVol.clone() as NiivueVolume;
-  overlay.img = data;
-  overlay.colormap = "warm";
-  overlay.opacity = 0.7;
-  overlay.cal_min = 0.1;
-  overlay.cal_max = 1.0;
-  nv.addVolume(overlay as unknown as Parameters<NiivueInstance["addVolume"]>[0]);
-  nv.updateGLVolume();
-}
-
-// ─── Main component ───────────────────────────────────────────────────
+// ─── Main component (imperative Three.js — NeuraLens approach) ────────
 
 export default function BrainViewer({
   activations = DEFAULT_REGIONS,
   onRegionClick,
   activeAgentName: _activeAgentName,
 }: BrainViewerProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const nvRef = useRef<NiivueInstance | null>(null);
-  const [webglFailed, setWebglFailed] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const sceneRef = useRef<{
+    scene: THREE.Scene;
+    camera: THREE.PerspectiveCamera;
+    renderer: THREE.WebGLRenderer;
+    controls: OrbitControls;
+    regionMeshes: Map<string, THREE.Group>;
+    regionMaterials: Map<string, THREE.MeshPhongMaterial>;
+    raycaster: THREE.Raycaster;
+    pointer: THREE.Vector2;
+    clock: THREE.Clock;
+    idleTime: number;
+    interacting: boolean;
+  } | null>(null);
 
-  // Init NiiVue on mount
+  const [selectedRegion, setSelectedRegion] = useState<RegionActivation | null>(null);
+  const [, setHoveredRegion] = useState<string | null>(null);
+  const activationsRef = useRef(activations);
+  activationsRef.current = activations;
+  const onRegionClickRef = useRef(onRegionClick);
+  onRegionClickRef.current = onRegionClick;
+
+  // Initialize Three.js scene
   useEffect(() => {
-    let cancelled = false;
+    if (!containerRef.current) return;
+    const container = containerRef.current;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
 
-    async function init() {
-      if (!canvasRef.current) return;
+    // Scene
+    const scene = new THREE.Scene();
 
-      try {
-        const { Niivue, SLICE_TYPE } = await import("@niivue/niivue");
+    // Camera
+    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
+    camera.position.set(0, 0.5, 3);
 
-        if (cancelled) return;
+    // Renderer — transparent bg
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x000000, 0);
+    container.appendChild(renderer.domElement);
 
-        const nv = new Niivue({
-          backColor: [1, 1, 1, 0],
-          crosshairColor: [0.8, 0.3, 0.1, 0.6],
-        });
+    // Controls
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.enablePan = false;
+    controls.minDistance = 1.8;
+    controls.maxDistance = 5;
 
-        nv.attachToCanvas(canvasRef.current);
-        await nv.loadVolumes([{ url: "/MNI152_T1_1mm.nii.gz" }]);
+    // Lighting
+    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+    const dir1 = new THREE.DirectionalLight(0xffffff, 0.8);
+    dir1.position.set(3, 5, 4);
+    scene.add(dir1);
+    const dir2 = new THREE.DirectionalLight(0x8888ff, 0.3);
+    dir2.position.set(-1, -3, -3);
+    scene.add(dir2);
 
-        if (cancelled) return;
+    const regionMeshes = new Map<string, THREE.Group>();
+    const regionMaterials = new Map<string, THREE.MeshPhongMaterial>();
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+    const clock = new THREE.Clock();
 
-        nv.setSliceType(SLICE_TYPE.RENDER);
-        nvRef.current = nv as unknown as NiivueInstance;
-        setIsLoading(false);
-      } catch (err) {
-        console.error("NiiVue init failed:", err);
-        if (!cancelled) {
-          setWebglFailed(true);
-          setIsLoading(false);
-        }
-      }
-    }
-
-    init();
-    return () => {
-      cancelled = true;
+    sceneRef.current = {
+      scene, camera, renderer, controls,
+      regionMeshes, regionMaterials,
+      raycaster, pointer, clock,
+      idleTime: 0, interacting: false,
     };
-  }, []);
 
-  // Update overlay when activations change
-  useEffect(() => {
-    if (!nvRef.current) return;
-    updateOverlay(nvRef.current, activations);
-  }, [activations]);
+    // ── Load brain surface OBJ (semi-transparent anatomical context) ─
 
-  // Region click handler
-  const handleClick = useCallback(() => {
-    if (!nvRef.current || !onRegionClick) return;
-
-    const nv = nvRef.current;
-    const mm = nv.frac2mm(nv.scene.crosshairPos);
-
-    const closest = activations.reduce((best, r) => {
-      const d = Math.hypot(r.mni[0] - mm[0], r.mni[1] - mm[1], r.mni[2] - mm[2]);
-      const bd = Math.hypot(best.mni[0] - mm[0], best.mni[1] - mm[1], best.mni[2] - mm[2]);
-      return d < bd ? r : best;
+    const brainMaterial = new THREE.MeshPhongMaterial({
+      color: new THREE.Color("#e8beaf"),
+      transparent: true,
+      opacity: 0.12,
+      side: THREE.DoubleSide,
+      shininess: 10,
+      depthWrite: false,
     });
 
-    const dist = Math.hypot(
-      closest.mni[0] - mm[0],
-      closest.mni[1] - mm[1],
-      closest.mni[2] - mm[2],
+    const loader = new OBJLoader();
+
+    loader.load(
+      "/brain_surface.obj",
+      (obj) => {
+        obj.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            (child as THREE.Mesh).material = brainMaterial;
+          }
+        });
+        scene.add(obj);
+      },
+      undefined,
+      (err) => console.warn("Failed to load brain_surface.obj:", err),
     );
 
-    if (dist < 20) onRegionClick(closest);
-  }, [activations, onRegionClick]);
+    // ── Load region activation meshes (like NeuraLens tumor meshes) ──
 
-  // SVG fallback when WebGL is unavailable
-  if (webglFailed) {
-    return <SvgFallback activations={activations} onRegionClick={onRegionClick} />;
-  }
+    for (const region of activationsRef.current) {
+      const config = REGION_MESH_CONFIG[region.region];
+      if (!config) continue;
+
+      const material = new THREE.MeshPhongMaterial({
+        color: new THREE.Color(config.color),
+        transparent: true,
+        opacity: 0.15 + region.activation * 0.65, // activation controls visibility
+        side: THREE.DoubleSide,
+        shininess: 30,
+        emissive: new THREE.Color(config.color),
+        emissiveIntensity: 0.3 + region.activation * 0.5,
+      });
+
+      regionMaterials.set(region.region, material);
+
+      loader.load(
+        config.file,
+        (obj) => {
+          obj.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+              (child as THREE.Mesh).material = material;
+              // Tag for raycasting
+              child.userData = { regionName: region.region };
+            }
+          });
+
+          // Add point light at center of region mesh for glow
+          const box = new THREE.Box3().setFromObject(obj);
+          const center = box.getCenter(new THREE.Vector3());
+          const light = new THREE.PointLight(
+            new THREE.Color(config.color),
+            region.activation * 2,
+            2,
+            2,
+          );
+          light.position.copy(center);
+          obj.add(light);
+
+          scene.add(obj);
+          regionMeshes.set(region.region, obj);
+        },
+        undefined,
+        (err) => console.warn(`Failed to load ${config.file}:`, err),
+      );
+    }
+
+    // ── Animation loop ──────────────────────────────────────────────
+
+    let frameId: number;
+    const animate = () => {
+      frameId = requestAnimationFrame(animate);
+      const s = sceneRef.current;
+      if (!s) return;
+
+      const elapsed = s.clock.getElapsedTime();
+      const delta = s.clock.getDelta();
+
+      // Auto-rotate when idle
+      if (s.interacting) {
+        s.idleTime = 0;
+      } else {
+        s.idleTime += delta;
+        if (s.idleTime > 2) {
+          s.camera.position.applyAxisAngle(new THREE.Vector3(0, 1, 0), 0.003);
+          s.camera.lookAt(0, 0, 0);
+        }
+      }
+
+      // Pulse region meshes (emissive intensity oscillation)
+      for (const region of activationsRef.current) {
+        const mat = s.regionMaterials.get(region.region);
+        if (!mat) continue;
+        if (region.activation > 0.3) {
+          const pulse = Math.sin(elapsed * (1.5 + region.activation * 1.5)) * 0.15 * region.activation;
+          mat.emissiveIntensity = 0.3 + region.activation * 0.5 + pulse;
+          mat.opacity = 0.15 + region.activation * 0.65 + pulse * 0.3;
+        }
+      }
+
+      s.controls.update();
+      s.renderer.render(s.scene, s.camera);
+    };
+    animate();
+
+    // ── Interaction ─────────────────────────────────────────────────
+
+    controls.addEventListener("start", () => {
+      if (sceneRef.current) sceneRef.current.interacting = true;
+    });
+    controls.addEventListener("end", () => {
+      if (sceneRef.current) sceneRef.current.interacting = false;
+    });
+
+    const handleResize = () => {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    };
+    window.addEventListener("resize", handleResize);
+
+    // Collect clickable meshes for raycasting
+    const getClickables = (): THREE.Object3D[] => {
+      const clickables: THREE.Object3D[] = [];
+      regionMeshes.forEach((group) => {
+        group.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh && child.userData.regionName) {
+            clickables.push(child);
+          }
+        });
+      });
+      return clickables;
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const rect = container.getBoundingClientRect();
+      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(pointer, camera);
+      const intersects = raycaster.intersectObjects(getClickables());
+
+      if (intersects.length > 0) {
+        const name = intersects[0].object.userData.regionName as string;
+        setHoveredRegion(name);
+        container.style.cursor = "pointer";
+      } else {
+        setHoveredRegion(null);
+        container.style.cursor = "grab";
+      }
+    };
+    container.addEventListener("pointermove", handlePointerMove);
+
+    const handleClick = (event: MouseEvent) => {
+      const rect = container.getBoundingClientRect();
+      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(pointer, camera);
+      const intersects = raycaster.intersectObjects(getClickables());
+
+      if (intersects.length > 0) {
+        const name = intersects[0].object.userData.regionName as string;
+        const region = activationsRef.current.find((r) => r.region === name);
+        if (region) {
+          setSelectedRegion(region);
+          onRegionClickRef.current?.(region);
+        }
+      } else {
+        setSelectedRegion(null);
+      }
+    };
+    container.addEventListener("click", handleClick);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      container.removeEventListener("pointermove", handlePointerMove);
+      container.removeEventListener("click", handleClick);
+      cancelAnimationFrame(frameId);
+      renderer.dispose();
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Update activation values reactively ────────────────────────
+
+  useEffect(() => {
+    const s = sceneRef.current;
+    if (!s) return;
+
+    for (const region of activations) {
+      const mat = s.regionMaterials.get(region.region);
+      if (!mat) continue;
+
+      const config = REGION_MESH_CONFIG[region.region];
+      if (!config) continue;
+
+      const color = new THREE.Color(activationColor(region.activation));
+      mat.color.copy(color);
+      mat.emissive.copy(color);
+      mat.emissiveIntensity = 0.3 + region.activation * 0.5;
+      mat.opacity = 0.15 + region.activation * 0.65;
+
+      // Update point light intensity
+      const group = s.regionMeshes.get(region.region);
+      if (group) {
+        group.traverse((child) => {
+          if (child instanceof THREE.PointLight) {
+            child.color.copy(color);
+            child.intensity = region.activation * 2;
+          }
+        });
+      }
+    }
+  }, [activations]);
 
   return (
-    <div className="relative w-full h-full flex items-center justify-center">
-      <canvas
-        ref={canvasRef}
-        onClick={handleClick}
-        className="w-full h-full"
-        style={{ cursor: onRegionClick ? "crosshair" : "default" }}
-      />
-
-      {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="flex flex-col items-center gap-2">
-            <div className="w-6 h-6 border-2 border-black/10 border-t-black/40 rounded-full animate-spin" />
-            <span className="text-[11px] text-black/30 font-medium tracking-wide">
-              Loading MNI152 atlas
-            </span>
-          </div>
-        </div>
+    <div
+      ref={containerRef}
+      className="relative w-full h-full"
+      style={{ minHeight: 300, cursor: "grab" }}
+    >
+      {selectedRegion && (
+        <RegionInfoPanel
+          region={selectedRegion}
+          onClose={() => setSelectedRegion(null)}
+        />
       )}
     </div>
   );

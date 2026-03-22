@@ -27,13 +27,6 @@ const AGENT_KEY: Record<string, string> = {
   Prosody: "prosody", Syntax: "syntax", Affective: "affective",
 };
 
-const REGION_ID_MAP: Record<string, string> = {
-  "Broca's area": "broca",
-  "Wernicke's area": "wernicke",
-  "DLPFC": "dlpfc",
-  "SMA": "sma",
-  "Amygdala": "amygdala",
-};
 
 function scoreColor(v: number) {
   if (v > 75) return "#D85A30";
@@ -46,7 +39,6 @@ function scoreColor(v: number) {
 
 const Dither = dynamic(() => import("@/components/Dither"), { ssr: false });
 const BrainViewer = dynamic(() => import("@/components/brain-viewer"), { ssr: false });
-const BrainAtlas = dynamic(() => import("@/components/brain-atlas"), { ssr: false });
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -146,15 +138,6 @@ export default function DashboardPage() {
     return { "Lexical agent": "Lexical", "Semantic agent": "Semantic", "Prosody agent": "Prosody", "Syntax agent": "Syntax" }[running.name];
   }, [agentSteps]);
 
-  const atlasActivations = useMemo(() => {
-    const record: Record<string, number> = {};
-    activations.forEach((r) => {
-      const id = REGION_ID_MAP[r.region];
-      if (id) record[id] = r.activation;
-    });
-    return record;
-  }, [activations]);
-
   // Shift+P toggles side panels (kept for power users)
   useEffect(() => {
     const fn = (e: KeyboardEvent) => { if (e.shiftKey && e.key === "P") e.preventDefault(); };
@@ -220,7 +203,13 @@ export default function DashboardPage() {
             if (ev.session_id) setSessionId(ev.session_id);
             if (ev.report) setCognitiveReport(ev.report as CognitiveReport);
             if (ev.scores) {
-              const scores = ev.scores as Record<string, number>;
+              console.log("RAW SCORES:", ev.scores);
+              // Handle both flat ({ lexical: 0.72 }) and nested ({ lexical: { overall: 0.72 } }) shapes
+              const raw = ev.scores as Record<string, number | { overall: number }>;
+              const scores: Record<string, number> = {};
+              for (const [key, val] of Object.entries(raw)) {
+                scores[key] = typeof val === "number" ? val : val.overall;
+              }
               setBiomarkerScores(scores);
               setActivations(BRAIN_REGIONS.map((r) => ({ ...r, activation: scores[AGENT_KEY[r.agent]] ?? r.activation })));
             }
@@ -271,7 +260,12 @@ export default function DashboardPage() {
       const data = await res.json();
       if (data.report) setCognitiveReport(data.report as CognitiveReport);
       if (data.scores) {
-        const scores = data.scores as Record<string, number>;
+        console.log("[NeuroTrace] raw langflow test scores:", data.scores);
+        const raw = data.scores as Record<string, number | { overall: number }>;
+        const scores: Record<string, number> = {};
+        for (const [key, val] of Object.entries(raw)) {
+          scores[key] = typeof val === "number" ? val : val.overall;
+        }
         setBiomarkerScores(scores);
         setActivations(BRAIN_REGIONS.map((r) => ({ ...r, activation: scores[AGENT_KEY[r.agent]] ?? r.activation })));
       }
@@ -474,7 +468,7 @@ export default function DashboardPage() {
                   </div>
                 )}
 
-                <BrainAtlas activations={atlasActivations} activeAgent={activeAgentName} />
+                <BrainViewer activations={activations} onRegionClick={(r) => console.log("Region clicked:", r)} activeAgentName={activeAgentName} />
               </div>
 
               {/* ── RIGHT: Agents + waveform + input (40%) ── */}

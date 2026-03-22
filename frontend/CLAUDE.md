@@ -150,158 +150,33 @@ type BrainViewerProps = {
 }
 ```
 
-### NiiVue setup
-```typescript
-import { Niivue, SLICE_TYPE } from '@niivue/niivue'
+## Brain viewer — Three.js 3D interactive (brain-viewer.tsx)
 
-// Init on mount
-const nv = new Niivue({ backColor: [1,1,1,0], crosshairColor: [0.8,0.3,0.1,0.6] })
-nv.attachToCanvas(canvasRef.current)
-await nv.loadVolumes([{ url: '/MNI152_T1_1mm.nii.gz' }])
-nv.setSliceType(SLICE_TYPE.RENDER)  // 3D render mode
-```
+Status: NiiVue REMOVED. Brain is now a self-contained Three.js component.
+No atlas file required. No external dependencies beyond @react-three/fiber + drei.
 
-### Atlas file
-Place at `frontend/public/MNI152_T1_1mm.nii.gz` (~20MB).
-```bash
-# Download
-curl -L https://github.com/neurolabusc/niivue/raw/main/demos/images/mni152.nii.gz \
-  -o frontend/public/MNI152_T1_1mm.nii.gz
-```
+Architecture:
+- Semi-transparent brain mesh (SphereGeometry + vertex displacement)
+- 5 glowing activation spheres at MNI-projected 3D positions  
+- OrbitControls (drag rotate, scroll zoom, auto-rotate when idle)
+- Raycasting click → onRegionClick(RegionActivation)
+- HTML overlay panel on click showing region description + science
 
-### Overlay generation — updateOverlay()
-Called every time `activations` prop changes. Paints a Gaussian blob centred on each MNI coord, scaled by activation score. Max-blends overlapping regions.
+MNI → 3D projection:
+  x = mni[0] / 90   (left-right)
+  y = mni[2] / 72   (up-down, MNI z maps to Y)
+  z = -mni[1] / 126 (anterior-posterior, inverted)
 
-```typescript
-function mniToVoxel(mni: [number,number,number]): [number,number,number] {
-  // MNI152 1mm isotropic: origin at [90, 126, 72]
-  return [
-    Math.round(90  - mni[0]),
-    Math.round(126 + mni[1]),
-    Math.round(72  + mni[2]),
-  ]
-}
+Region science descriptions (hardcoded):
+- Broca's [-44,20,8]: lexical retrieval, expressive aphasia substrate
+- Wernicke's [-54,-40,14]: semantic comprehension, coherence processing  
+- DLPFC [-46,20,32]: executive function, syntactic working memory
+- SMA [0,-4,60]: speech motor timing, prosodic control
+- Amygdala [-24,-4,-22]: emotional salience, affective language
 
-function updateOverlay(nv: Niivue, activations: RegionActivation[]) {
-  const hdr = nv.volumes[0]?.hdr
-  if (!hdr) return
-  const { dims, pixDims } = hdr
-  const [nx, ny, nz] = [dims[1], dims[2], dims[3]]
-  const data = new Float32Array(nx * ny * nz).fill(0)
+Score shape from Langflow — handle BOTH:
+  flat:   { lexical: 0.72, semantic: 0.58, ... }
+  nested: { lexical: { overall: 0.72 }, ... }
 
-  for (const r of activations) {
-    const [vx, vy, vz] = mniToVoxel(r.mni)
-    const sigVox = 8 / pixDims[1]   // 8mm Gaussian blob
-    for (let x = Math.max(0,vx-15); x < Math.min(nx,vx+15); x++)
-    for (let y = Math.max(0,vy-15); y < Math.min(ny,vy+15); y++)
-    for (let z = Math.max(0,vz-15); z < Math.min(nz,vz+15); z++) {
-      const d2 = ((x-vx)**2 + (y-vy)**2 + (z-vz)**2) / (sigVox**2)
-      const val = r.activation * Math.exp(-d2 / 2)
-      const idx = x + y*nx + z*nx*ny
-      if (val > data[idx]) data[idx] = val   // max blend
-    }
-  }
-
-  if (nv.volumes.length > 1) nv.removeVolumeByIndex(1)
-  nv.addVolumeFromBuffer(data, hdr, {
-    colormap: 'warm',   // gray → blue → amber → coral
-    opacity: 0.7,
-    cal_min: 0.1,
-    cal_max: 1.0,
-  })
-}
-```
-
-### Region click interaction
-```typescript
-// Fired by canvas onClick
-const handleClick = () => {
-  if (!nvRef.current || !onRegionClick) return
-  const mm = nvRef.current.frac2mm(nvRef.current.scene.crosshairPos)
-  const closest = activations.reduce((best, r) => {
-    const d  = Math.hypot(r.mni[0]-mm[0], r.mni[1]-mm[1], r.mni[2]-mm[2])
-    const bd = Math.hypot(best.mni[0]-mm[0], best.mni[1]-mm[1], best.mni[2]-mm[2])
-    return d < bd ? r : best
-  })
-  // Only fire if click is within 20mm of a known region
-  const dist = Math.hypot(...activations.map((_,i) => closest.mni[i] - mm[i]) as any)
-  if (dist < 20) onRegionClick(closest)
-}
-```
-
-### SVG fallback
-When NiiVue fails to load (WebGL unsupported), render the SVG silhouette with projected MNI dots. MNI → SVG projection (lateral view, viewBox 0 0 400 320):
-```typescript
-const project = (mni: [number,number,number]): [number,number] => [
-  ((mni[0] + 80) / 160) * 280 + 60,
-  280 - ((mni[2] + 50) / 130) * 220,
-]
-```
-Activation color scale: >0.75 → `#D85A30`, >0.5 → `#EF9F27`, >0.25 → `#1D9E75`, else `#B4B2A9`
-
-### How page.tsx wires the brain
-```typescript
-// In page.tsx — Person 3's file
-const [activations, setActivations] = useState<RegionActivation[]>(DEFAULT_REGIONS)
-const [clickedRegion, setClickedRegion] = useState<RegionActivation | null>(null)
-
-// On type:end from NDJSON stream:
-// Convert BiomarkerScores → RegionActivation[]
-const newActivations = BRAIN_REGIONS.map(r => ({
-  ...r,
-  activation: scores[r.agent.toLowerCase()].overall
-}))
-setActivations(newActivations)
-
-// In JSX:
-<BrainViewer activations={activations} onRegionClick={setClickedRegion} />
-{clickedRegion && <RegionPanel region={clickedRegion} onClose={() => setClickedRegion(null)} />}
-```
-
----
-
-## Whisper STT — api/transcribe/route.ts
-```typescript
-// POST multipart/form-data { audio: File }
-// Returns: { transcript, pauseMap, wordTimestamps, duration }
-
-whisperFormData.append("model", "whisper-1")
-whisperFormData.append("response_format", "verbose_json")
-whisperFormData.append("timestamp_granularities[]", "word")   // critical
-
-// Pause map extraction
-function extractPauseMap(words): number[] {
-  return words.slice(0,-1)
-    .map((w,i) => words[i+1].start - w.end)
-    .filter(gap => gap > 0.1)   // >100ms only
-}
-```
-
----
-
-## Science citations (use in report + demo)
-- **Snowdon et al. (2001)** — idea density predicts Alzheimer's decades early
-- **Elvevåg et al. (2010)** — semantic coherence as schizophrenia biomarker
-- **DementiaBank corpus** — speech markers for cognitive decline
-- **LIWC (Pennebaker et al.)** — affective and cognitive word categories
-- **Baddeley (2000)** — working memory model (syntactic complexity anchor)
-
-Demo line when brain lights up:
-> *"Each glowing region corresponds to a real MNI152 coordinate. The blob size and colour reflect the activation score from that domain's agent — the same coordinate space used in clinical neuroimaging research."*
-
----
-
-## Team ownership
-| Person | Owns |
-|---|---|
-| Person 1 | Langflow nodes, FastAPI agents, Whisper STT |
-| **Person 2** | **brain-viewer.tsx, NiiVue, MNI overlay, region click, /api/transcribe** |
-| Person 3 | page.tsx shell, agent cards, radar chart, waveform, sidebar |
-| Person 4 | Claude system prompts, science citations, demo script, slides |
-
-### Person 2 handoff contract
-- Export `BrainViewer` as default, `DEFAULT_REGIONS` + `RegionActivation` as named exports
-- `DEFAULT_REGIONS` must work with zero backend (Person 3 unblocked immediately)
-- Brain lights up within 3s of receiving `activations` prop update
-- `onRegionClick` fires `RegionActivation` when canvas clicked within 20mm of a region
-- `/api/transcribe` returns `{ transcript, pauseMap, wordTimestamps, duration }`
+Exports: default BrainViewer, named DEFAULT_REGIONS, type RegionActivation
+Loaded via: dynamic(() => import('@/components/brain-viewer'), { ssr: fal
