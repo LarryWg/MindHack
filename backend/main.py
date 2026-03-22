@@ -86,6 +86,7 @@ def _fallback_scores() -> dict:
     }
 
 
+
 def _strip_markdown_fences(text: str) -> str:
     """Remove ```json ... ``` or ``` ... ``` fences."""
     t = text.strip()
