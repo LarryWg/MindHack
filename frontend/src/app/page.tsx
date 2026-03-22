@@ -120,6 +120,7 @@ function MiniAgentCard({ agent, isActive }: { agent: AgentCardProps; isActive: b
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [hasStarted, setHasStarted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -299,35 +300,47 @@ export default function DashboardPage() {
 
       {/* App shell */}
       <div className="relative z-10 flex h-screen w-full">
-        {/* Sidebar — glass only here */}
-        <GlassSurface
-          width={240}
-          height={"100%" as unknown as number}
-          borderRadius={0}
-          opacity={0.7}
-          blur={14}
-          className="shrink-0 border-r border-black/5"
-          contentClassName="!p-0 !items-start !justify-start"
+        {/* Sidebar — animated width wrapper clips the panel in/out */}
+        <div
+          className="shrink-0 overflow-hidden"
+          style={{
+            width: sidebarOpen ? 240 : 0,
+            transition: "width 280ms cubic-bezier(0.4, 0, 0.2, 1)",
+          }}
         >
-          <NeuroSidebar
-            activePage={activePage}
-            onNavItemClick={(item) => setActivePage(item.title.toLowerCase())}
-            onNewAnalysis={() => {
-              setActivePage("analysis");
-              setHasStarted(false);
-              setAgentSteps([]);
-              setBiomarkerScores(undefined);
-              setCognitiveReport(undefined);
-              setActivations(BRAIN_REGIONS);
-              setWordTimestamps(undefined);
-              setAudioDuration(undefined);
-            }}
-          />
-        </GlassSurface>
+          <GlassSurface
+            width={240}
+            height={"100%" as unknown as number}
+            borderRadius={0}
+            opacity={0.7}
+            blur={14}
+            className="border-r border-black/5"
+            contentClassName="!p-0 !items-start !justify-start"
+          >
+            <NeuroSidebar
+              activePage={activePage}
+              onNavItemClick={(item) => setActivePage(item.title.toLowerCase())}
+              onNewAnalysis={() => {
+                setActivePage("analysis");
+                setHasStarted(false);
+                setAgentSteps([]);
+                setBiomarkerScores(undefined);
+                setCognitiveReport(undefined);
+                setActivations(BRAIN_REGIONS);
+                setWordTimestamps(undefined);
+                setAudioDuration(undefined);
+              }}
+            />
+          </GlassSurface>
+        </div>
 
-        {/* Main content */}
+        {/* Main content — flex-1 fills whatever space the sidebar leaves */}
         <div className="flex flex-col flex-1 min-w-0">
-          <SiteHeader title="Cognitive Analysis" />
+          <SiteHeader
+            title="Cognitive Analysis"
+            sidebarOpen={sidebarOpen}
+            onToggleSidebar={() => setSidebarOpen((o) => !o)}
+          />
 
           <div className="relative flex-1 min-h-0 overflow-hidden">
 
